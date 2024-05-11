@@ -23,6 +23,14 @@
             border-radius: 10px;
             box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
         }
+        #truckDimensions {
+            text-align: center; /* Center-align the content */
+        }
+
+        #truckDimensions img {
+            display: block; /* Make the image a block element */
+            margin: 0 auto; /* Center-align the image */
+        }
 
         #truckSpec{
             max-width: 300 px;
@@ -71,6 +79,10 @@
         input[type="submit"]:hover, button[type="submit"]:hover {
             background-color: #45a049;
         }
+        form {
+            text-align: center;
+        }
+
 
         .container {
             max-width: 1000px;
@@ -121,6 +133,65 @@
 
             return label;
         }
+        var truck_specs = {
+            "General Purpose container 20'": {
+                "length_container": 5900,
+                "width_container": 2352,
+                "height_container": 2393,
+                "max_weight": 32500,
+                "image": "static/container_20.png"
+                // Add more specifications as needed
+            },
+            "General Purpose container 40'": {
+                "length_container": 12032,
+                "width_container": 2352,
+                "height_container": 2395,
+                "max_weight": 32500,
+                "image": "static/container_40.png"
+
+                // Add more specifications as needed
+            },
+            "High - Cube General Purpose container 40'": {
+                "length_container": 12032,
+                "width_container": 2432,
+                "height_container": 2700,
+                "max_weight": 32500,
+                "image": "static/high_container_40.png"
+
+            },
+            // Add more specifications as needed
+        };
+
+        function showTruckDimensions() {
+            var select = document.getElementById("truckSpec");
+            var selectedOption = select.options[select.selectedIndex].value;
+            var truckDimensions = document.getElementById("truckDimensions");
+
+            // Clear previous dimensions
+            truckDimensions.innerHTML = "";
+
+            // Display dimensions based on selected option
+            var dimensions = getTruckDimensions(selectedOption);
+            if (dimensions) {
+                var dimensionText = document.createElement("p");
+                dimensionText.textContent = "Dimensions: " + dimensions;
+                truckDimensions.appendChild(dimensionText);
+
+                var imgSrc = truck_specs[selectedOption].image;
+                var img = document.createElement("img");
+                img.src = imgSrc;
+                img.alt = selectedOption;
+                truckDimensions.appendChild(img);
+            }
+        }
+
+        function getTruckDimensions(selectedOption) {
+            var specs = truck_specs[selectedOption];
+            if (specs) {
+                return "Length: " + specs.length_container + "mm, Width: " + specs.width_container + "mm, Height: " + specs.height_container + "mm, Max Weight: " + specs.max_weight + "kg";
+            }
+            return null;
+        }
     </script>
 </head>
 <body>
@@ -138,11 +209,12 @@
             <label for="file">Upload CSV or Excel File:</label>
             <input type="file" id="file" name="file">
             <label for="truckSpec">Select Truck Specification:</label>
-            <select id="truckSpec" name="truckSpec">
+            <select id="truckSpec" name="truckSpec" onchange="showTruckDimensions()">
                 <option value="General Purpose container 20'">General Purpose container 20'</option>
                 <option value="General Purpose container 40'">General Purpose container 40'</option>
                 <option value="High - Cube General Purpose container 40'">High - Cube General Purpose container 40'</option>
             </select>
+            <div id="truckDimensions"></div> 
             <br>
             <button type="submit">Upload</button>
         </form>
