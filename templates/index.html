@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Container Builder</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        #containerForm {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #truckSpec{
+            max-width: 300 px;
+        }
+
+        .input-row {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: inline-block;
+            width: 150px;
+            text-align: right;
+            margin-right: 20px;
+            margin-bottom: 5px;
+            color: #555555;
+        }
+
+        .checkbox-label {
+            margin-left: 30px; /* Adjust the left margin to create space */
+        }
+
+        input, button, select {
+            width: 200px;
+            margin-bottom: 5px;
+            padding: 8px;
+            border: 1px solid #cccccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        input[type="number"] {
+            width: 80px;
+        }
+
+        input[type="submit"], button[type="submit"] {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        input[type="submit"]:hover, button[type="submit"]:hover {
+            background-color: #45a049;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+    </style>
+    <script>
+        function generateInputs() {
+            var numTypes = document.getElementById("numTypes").value;
+            var form = document.getElementById("productForm");
+
+            // Clear previous inputs
+            form.innerHTML = "";
+
+            // Generate new inputs
+            for (var i = 0; i < numTypes; i++) {
+                var rowDiv = document.createElement("div");
+                rowDiv.classList.add("input-row");
+
+                rowDiv.appendChild(createInput("Gross Weight:", "text", "grossWeight"));
+                rowDiv.appendChild(createInput("Net Weight:", "text", "netWeight"));
+                rowDiv.appendChild(createInput("Volume:", "text", "volume"));
+                rowDiv.appendChild(createInput("Temperature:", "text", "temperature"));
+                rowDiv.appendChild(createInput("Length:", "text", "length"));
+                rowDiv.appendChild(createInput("Width:", "text", "width"));
+                rowDiv.appendChild(createInput("Height:", "text", "height"));
+                rowDiv.appendChild(createInput("Number of Cases:", "text", "numberOfCases"));
+
+                // Add rotation allowed cell
+                var rotationCell = createInput("Rotation Allowed:", "checkbox", "rotationAllowed");
+                rotationCell.classList.add("checkbox-label"); // Add a class for styling
+                rowDiv.appendChild(rotationCell);
+
+                form.appendChild(rowDiv);
+            }
+        }
+
+        function createInput(labelText, type = "text", name = "") {
+            var label = document.createElement("label");
+            label.textContent = labelText;
+
+            var input = document.createElement("input");
+            input.type = type;
+            input.name = name;
+            input.required = true;
+
+            label.appendChild(input);
+
+            return label;
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Container Builder</h1>
+        <form id="containerForm" action="/upload" method="POST">
+            <label for="numTypes">Number of Types of Boxes:</label>
+            <input type="number" id="numTypes" name="numTypes" min="1" value="1" onchange="generateInputs()">
+            <div id="productForm">
+                <!-- Dynamic inputs will be generated here -->
+            </div>
+            <button type="submit">Submit</button>
+        </form>
+        <form id="fileUploadForm" enctype="multipart/form-data" style="margin-top: 30px;" action="/upload" method="POST">
+            <label for="file">Upload CSV or Excel File:</label>
+            <input type="file" id="file" name="file">
+            <label for="truckSpec">Select Truck Specification:</label>
+            <select id="truckSpec" name="truckSpec">
+                <option value="General Purpose container 20'">General Purpose container 20'</option>
+                <option value="General Purpose container 40'">General Purpose container 40'</option>
+                <option value="High - Cube General Purpose container 40'">High - Cube General Purpose container 40'</option>
+            </select>
+            <br>
+            <button type="submit">Upload</button>
+        </form>
+    </div>
+</body>
+</html>

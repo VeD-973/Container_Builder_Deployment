@@ -1,0 +1,5 @@
+Flask 
+Gunicorn
+matplotlib
+pandas
+copy
