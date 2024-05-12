@@ -1091,7 +1091,7 @@ def load_backend_function():
     for i in range(len(perms)):
         # if i !=18:
         #     continue
-        print("iteration: ",i)
+        # print("iteration: ",i)
         # print("Perm",perms[i])
         stored_plac = []
         storage_strip=[]
@@ -1117,7 +1117,7 @@ def load_backend_function():
         ax.set_box_aspect([1, length_container/width_container, height_container/width_container])
 
         x,z= 0,0
-        print("Perm",perms[i])
+        # print("Perm",perms[i])
         for j in range(len(perms[i])):
             # print(perms[i][j])
             # print(prev_row)
