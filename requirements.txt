@@ -3,4 +3,3 @@ Gunicorn
 matplotlib
 pandas
 openpyxl
-json
