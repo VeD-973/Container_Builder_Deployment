@@ -3,3 +3,5 @@ Gunicorn
 matplotlib
 pandas
 openpyxl
+itertools
+json
