@@ -7,10 +7,16 @@ import pandas as pd
 import json
 from copy import deepcopy
 from itertools import permutations
+import os
+import psutil
 app = Flask(__name__)
 
 storage_boxes=pd.DataFrame()
 storage_truck_spec={}
+
+def memory_usage():
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / (1024 * 1024)  # in MB
 
 truck_specs = {
     "General Purpose container 20'": {
@@ -1180,6 +1186,7 @@ def load_backend_function():
     'df_html': df_html,  # DataFrame converted to HTML format
     'iteration_number': iteration_number
     }
+    print("Memory usage:", memory_usage(), "MB")
     
     return jsonify(response)
 
