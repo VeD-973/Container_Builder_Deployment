@@ -170,7 +170,7 @@ def perform_computation(data,truck_spec):
     df = pd.DataFrame(strip_list)
     df.columns= ['Length','Width','Height','NumOfBoxesPerStrip','TotalNumStrips','Rem_Boxes','TotalCases','Marked', 'Alpha(rotation about Z-axis)','GrossWeight']
     # Drop the 'Marked' column
-    df.drop(columns=['Marked'], inplace=True)
+    # df.drop(columns=['Marked'], inplace=True)
 
     # Add 'BoxNumber' column
     df['BoxNumber'] = df.index
@@ -181,6 +181,8 @@ def perform_computation(data,truck_spec):
     # Add 'Color' column
     df['Color'] = df['BoxNumber'].map(colors)
     df = df[['BoxNumber', 'Color'] + [col for col in df.columns if col not in ['BoxNumber', 'Color']]]
+    df['Rem_Strips'] = 0
+
     # print(df)
 
 
@@ -299,8 +301,7 @@ def perform_computation(data,truck_spec):
             
 
 
-
-    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,strip_storage,prev_y,prev_row,prev_row_num,area_covered,y_min):
+    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,strip_storage,prev_y,prev_row,prev_row_num,area_covered,y_min,df):
         width_container = float(container.width)
         height_container = float(container.height)
         depth_container = float(container.length)
@@ -484,10 +485,11 @@ def perform_computation(data,truck_spec):
         prev_row[len(prev_row)-1].append(1)
         prev_row[len(prev_row)-1].append(row)
         y_min = min(y_min,y)
+        df.at[box_num, 'Rem_Strips'] =total_strips
+        df.at[box_num,'Marked'] = 0
+        # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
+        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df
 
-
-        stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
-        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min
 
 
 
@@ -553,7 +555,7 @@ def perform_computation(data,truck_spec):
         ans =choose_best_dimension(x,end_x,z,strip_list,container_toFit,stored_plac)
         strip_list[ans][7] = False
         if i == 0:
-            y=length_container-strip_list[ans][0]
+            y=length_container-strip_list[ans][0]-1
             y_min = min(y_min,y)
         if y<=0:
             break
@@ -562,17 +564,22 @@ def perform_computation(data,truck_spec):
             y_min = min(y_min,y)
 
             prev_row.append([x,y])
-            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min)
+            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min,df)
         else:
             if(i!=0 and row==0):
                 y = y-1+prev_row[len(prev_row)-1][4]-strip_list[ans][0]
             prev_row.append([x,y])
-            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min)
-
-    filename_final = create_bottom_view(ax,y_min)
-
+            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min,df)
     if y_min <0:
         y_min = 0
+    filename_final = create_bottom_view(ax,y_min)
+
+
+    for i in range(len(df)):
+        if df.at[i,'Marked']==1:
+            df.at[i,'Rem_Strips'] = df.at[i,'TotalNumStrips']
+    # print(df)
+    df.drop(columns=['Marked'], inplace=True)
     # print("y_min",y_min)
     # print("Efficiency",round(area_covered/((container_toFit.length-y_min)*container_toFit.width),2))
     # print("for homogenous end coordinates, ",x,y,z)
@@ -683,10 +690,6 @@ def load_backend_function():
 
 
 
-    # print(container_toFit.length)
-
-    ## Creating simple strips (all of same type of boxes.)
-
     def remBoxes(box_set,strip_list):
         rem_boxes = []
         num_of_strips_per_boxType=[]
@@ -721,7 +724,6 @@ def load_backend_function():
     df = pd.DataFrame(strip_list)
     df.columns= ['Length','Width','Height','NumOfBoxesPerStrip','TotalNumStrips','Rem_Boxes','TotalCases','Marked', 'Alpha(rotation about Z-axis)','GrossWeight']
     # Drop the 'Marked' column
-    df.drop(columns=['Marked'], inplace=True)
 
     # Add 'BoxNumber' column
     df['BoxNumber'] = df.index
@@ -732,6 +734,7 @@ def load_backend_function():
     # Add 'Color' column
     df['Color'] = df['BoxNumber'].map(colors)
     df = df[['BoxNumber', 'Color'] + [col for col in df.columns if col not in ['BoxNumber', 'Color']]]
+    df['Rem_Strips'] = 0
     # print(df)
 
 
@@ -851,7 +854,7 @@ def load_backend_function():
 
 
 
-    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,strip_storage,prev_y,prev_row,prev_row_num,area_covered,y_min):
+    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,strip_storage,prev_y,prev_row,prev_row_num,area_covered,y_min,df):
         width_container = float(container.width)
         height_container = float(container.height)
         depth_container = float(container.length)
@@ -1035,10 +1038,10 @@ def load_backend_function():
         prev_row[len(prev_row)-1].append(1)
         prev_row[len(prev_row)-1].append(row)
         y_min = min(y_min,y)
-
-
-        stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
-        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min
+        df.at[box_num, 'Rem_Strips'] =total_strips
+        df.at[box_num,'Marked'] = 0
+        # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
+        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df
 
 
 
@@ -1093,6 +1096,10 @@ def load_backend_function():
         #     continue
         # print("iteration: ",i)
         # print("Perm",perms[i])
+        # if len(perms)!=0:
+        #     if y <0:
+        #         y_min = min(y,y_min)
+        #         break
         stored_plac = []
         storage_strip=[]
         area_covered = 0
@@ -1139,14 +1146,14 @@ def load_backend_function():
                 y_min = min(y_min,y)
                 prev_row.append([x,y])
                 storage_strip.append([x,y])
-                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min)
+                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min,df)
             else:
                 if(j!=0 and row==0):
                     y = y-1+prev_row[len(prev_row)-1][4]-strip_list[perms[i][j]][0]
                 y_min = min(y_min,y)
                 prev_row.append([x,y])
                 storage_strip.append([x,y])
-                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min)
+                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min,df)
 
  
         if y_min <0:
@@ -1157,11 +1164,16 @@ def load_backend_function():
     
     max_efficiency3 = max(all_y_min)
     max_index3 = all_y_min.index(max_efficiency3)
-    print("Least Y occupied:", max_efficiency3)
-    print("Iteration Number (0-indexed):", max_index3)
+    # print("Least Y occupied:", max_efficiency3)
+    # print("Iteration Number (0-indexed):", max_index3)
     iteration_number= max_index3
+    for i in range(len(df)):
+        if df.at[i,'Marked']==1:
+            df.at[i,'Rem_Strips'] = df.at[i,'TotalNumStrips']
+    df.drop(columns=['Marked'], inplace=True)
 
-    df_html = df.to_html() 
+
+    df_html = df.to_html()  
 
     response = {
     'show_optimal_solution': True,  # Set this to True if you want to display the optimal solution
