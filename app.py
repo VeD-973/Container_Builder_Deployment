@@ -14,9 +14,15 @@ app = Flask(__name__)
 storage_boxes=pd.DataFrame()
 storage_truck_spec={}
 
+max_memory_usage = 0  # Initialize max memory usage
+
 def memory_usage():
+    global max_memory_usage  # Access the global variable
     process = psutil.Process(os.getpid())
-    return process.memory_info().rss / (1024 * 1024)  # in MB
+    memory_mb = process.memory_info().rss / (1024 * 1024)  # in MB
+    max_memory_usage = max(max_memory_usage, memory_mb)  # Update max memory usage if needed
+    return memory_mb
+
 
 truck_specs = {
     "General Purpose container 20'": {
@@ -307,7 +313,7 @@ def perform_computation(data,truck_spec):
             
 
 
-    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,strip_storage,prev_y,prev_row,prev_row_num,area_covered,y_min,df):
+    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,strip_storage,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted):
         width_container = float(container.width)
         height_container = float(container.height)
         depth_container = float(container.length)
@@ -354,12 +360,13 @@ def perform_computation(data,truck_spec):
                         z += box_height
                         num_strips -= 1
                         curr_weight+=strip_list[box_num][9]
+                        vol_occ+=box_length*box_width*box_height
+
                     # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                     # x += box_width.
                     z = 0
                     total_strips -= 1
                     # prev_row[len(prev_row)-1][2]=deepcopy(x)
-                    area_covered+=box_length*box_width
                     if total_strips==0:
                         x+=box_width
                         continue
@@ -379,6 +386,7 @@ def perform_computation(data,truck_spec):
                             z += box_height
                             num_strips -= 1
                             curr_weight+=strip_list[box_num][9]
+                            vol_occ+=box_length*box_width*box_height
                         x+=box_width
                         # print("Yes goes in",end_x)
                         # print("Y_before",y)
@@ -389,7 +397,7 @@ def perform_computation(data,truck_spec):
                         # print("Y_after",y)
 
                         total_strips-=1
-                        area_covered+=box_length*box_width
+
                     
                     # if total_strips==0:
 
@@ -401,9 +409,10 @@ def perform_computation(data,truck_spec):
                         z += box_height
                         num_strips -= 1
                         curr_weight+=strip_list[box_num][9]
+                        vol_occ+=box_length*box_width*box_height
+
                     # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                     x += box_width
-                    area_covered+=box_length*box_width
                     z = 0
                     total_strips -= 1
 
@@ -413,6 +422,11 @@ def perform_computation(data,truck_spec):
                 # x = end_x
                 y_min = min(y_min,y)
                 if x+box_width> width_container:
+                    # print("Inside1",end_x-x)
+                    # print("vol_wasted",abs(width_container-x)*box_length*height_container)
+
+                    vol_wasted += abs(width_container-x)*box_length*height_container
+
                     x = width_container
                 
 
@@ -440,10 +454,23 @@ def perform_computation(data,truck_spec):
 
                 # print("INdex",index)
                 # print("prev_row_num",prev_row_num)
-                if end_x-x< (x+box_width)-end_x:  ##Checks the better one between putting one extra or shifting according to the previous row
+                rem=0
+                rem_y=0
+                went_in_1 = False
+                went_in_2 =False
+                if x!=0 and end_x-x< (x+box_width)-end_x: 
+                    ##Checks the better one between putting one extra or shifting according to the previous row
+                    # print("Inside2",end_x-x)
+                    # vol_wasted += (end_x-x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
+                    rem=deepcopy(abs(x-end_x))
+                    if len(prev_row) >1 and index<len(prev_row) and prev_row[index][6] == prev_row_num and prev_row[index][3] > prev_y:
+                        went_in_1=True
                     x +=(end_x-x)
                 else:
                     if len(prev_row) >1 and index<len(prev_row) and prev_row[index][6] == prev_row_num and prev_row[index][3] > prev_y and x + box_width <= width_container:
+                        went_in_2=True
+                        # print("Inside3",end_x-x)
+                        # vol_wasted += (x+box_width-end_x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
                         num_strips = strip_list[box_num][3]
                         # print("UES")
                         while num_strips > 0 and curr_weight < max_weight:
@@ -451,17 +478,42 @@ def perform_computation(data,truck_spec):
                             z += box_height
                             num_strips -= 1
                             curr_weight+=strip_list[box_num][9]
+                            vol_occ+=box_length*box_width*box_height
+
                         # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                         x += box_width
                         z = 0
                         total_strips -= 1
                         prev_row[len(prev_row)-1][2]=deepcopy(x)
+                        rem=deepcopy(abs(x-end_x))
                         # storage_strip[len(storage_strip)-1][2]=deepcopy(x)
 
-                        area_covered+=box_length*box_width
 
-          
+                p_y=0
+                if went_in_1 is True:
+                    p_y = deepcopy(y+box_length)
+                elif went_in_1 is False and went_in_2 is False:
+                    p_y = deepcopy(box_length)
+                else:
+                    p_y = deepcopy(y+box_length)
+
+
+
+
                 y,end_x,row,prev_row,prev_y,prev_row_num= (findoptlen(prev_row,x,y,end_x,box_width,row,prev_y,prev_row_num))
+                # print("y_diff",abs(p_y-y))
+                # print("rem",rem)
+
+                if x!=0 and went_in_1 is True:
+                    # print("went_1_true:",y-box_length-p_y)
+                    vol_wasted += abs(y-box_length-p_y)*rem*height_container
+                elif x!=0 and went_in_1 is False and went_in_2 is False:
+                    # print("went_1_false and went_2_false",p_y)
+                    vol_wasted += abs(p_y)*rem*height_container
+                else:
+                    if x!=0:
+                        # print("all others",y-p_y)
+                        vol_wasted += abs(y-p_y)*rem*height_container
                 y_min = min(y_min,y)
 
          
@@ -483,6 +535,208 @@ def perform_computation(data,truck_spec):
                 prev_row.append([x,y])
                 storage_strip.append([x,y])
 
+
+        if y<0 and total_strips!=0:
+            y+=box_length
+            y-=box_width
+            if y>0:
+                temp = deepcopy(box_length)
+                box_length = deepcopy(box_width)
+                box_width = deepcopy(temp)
+                while total_strips > 0 and y > 0:
+                    if x + box_width <= end_x and x + box_width <= width_container:  ## added the max weight check constraints
+                        # print("prev_row",prev_row)
+                        if len(prev_row) >1 and prev_row[len(prev_row)-2][1]>=0 and y-prev_row[len(prev_row)-2][1] > box_length and row== prev_row[len(prev_row)-2][6]:
+                            # x-= box_width
+                            
+                            # print("x",x)
+                            # print("y",y)
+
+                            # print("yes went inside")
+                            # y = y-box_length
+                            num_strips = strip_list[box_num][3]
+                            # print("UES")
+                            while num_strips > 0 and curr_weight < max_weight:
+                                ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
+                                z += box_height
+                                num_strips -= 1
+                                curr_weight+=strip_list[box_num][9]
+                                vol_occ+=box_length*box_width*box_height
+
+                            # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
+                            # x += box_width.
+                            z = 0
+                            total_strips -= 1
+                            # prev_row[len(prev_row)-1][2]=deepcopy(x)
+                            if total_strips==0:
+                                x+=box_width
+                                continue
+                            if total_strips>0:
+                                if y-box_length>=0:
+                                    y-=box_length
+                                else:
+                                    continue
+                                prev_row[len(prev_row)-1][1]=deepcopy(y)
+                                storage_strip[len(storage_strip)-1][1]=deepcopy(y)
+                                
+
+                                num_strips = strip_list[box_num][3]
+                                # print("UES")
+                                while num_strips > 0 and curr_weight < max_weight:
+                                    ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
+                                    z += box_height
+                                    num_strips -= 1
+                                    curr_weight+=strip_list[box_num][9]
+                                    vol_occ+=box_length*box_width*box_height
+                                x+=box_width
+                                # print("Yes goes in",end_x)
+                                # print("Y_before",y)
+
+                                if x+box_width<=end_x:
+                                    y+=box_length
+                                z=0
+                                # print("Y_after",y)
+
+                                total_strips-=1
+
+                            
+                            # if total_strips==0:
+
+
+                        else:
+                            num_strips = strip_list[box_num][3]
+                            while num_strips > 0 and curr_weight < max_weight:
+                                ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
+                                z += box_height
+                                num_strips -= 1
+                                curr_weight+=strip_list[box_num][9]
+                                vol_occ+=box_length*box_width*box_height
+
+                            # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
+                            x += box_width
+                            z = 0
+                            total_strips -= 1
+
+                        
+
+                    else: 
+                        # x = end_x
+                        y_min = min(y_min,y)
+                        if x+box_width> width_container:
+                            # print("Inside1",end_x-x)
+                            # print("vol_wasted",abs(width_container-x)*box_length*height_container)
+
+                            vol_wasted += abs(width_container-x)*box_length*height_container
+
+                            x = width_container
+                        
+
+                        prev_row[len(prev_row)-1].append(x)
+                        prev_row[len(prev_row)-1].append(y)
+                        prev_row[len(prev_row)-1].append(box_length)
+                        prev_row[len(prev_row)-1].append(1)
+                        prev_row[len(prev_row)-1].append(row)
+                        
+                        
+
+                        # print("Y",y)
+                        # print("prev_row_before",prev_row)
+                        # print("prev_y",prev_y)
+                        # print("x",x)
+                        # print("Row",row)
+                        index=0
+                        if x + box_width > width_container:
+                            # efficiency_new.append([y_min,row])
+                            row+=1
+                            x = 0
+                            z = 0
+                        while index<len(prev_row) and (prev_row[index][6]!=row-1):
+                            index+=1
+
+                        # print("INdex",index)
+                        # print("prev_row_num",prev_row_num)
+                        rem=0
+                        rem_y=0
+                        went_in_1 = False
+                        went_in_2 =False
+                        if x!=0 and end_x-x< (x+box_width)-end_x: 
+                            ##Checks the better one between putting one extra or shifting according to the previous row
+                            # print("Inside2",end_x-x)
+                            # vol_wasted += (end_x-x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
+                            rem=deepcopy(abs(x-end_x))
+                            if len(prev_row) >1 and index<len(prev_row) and prev_row[index][6] == prev_row_num and prev_row[index][3] > prev_y:
+                                went_in_1=True
+                            x +=(end_x-x)
+                        else:
+                            if len(prev_row) >1 and index<len(prev_row) and prev_row[index][6] == prev_row_num and prev_row[index][3] > prev_y and x + box_width <= width_container:
+                                went_in_2=True
+                                # print("Inside3",end_x-x)
+                                # vol_wasted += (x+box_width-end_x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
+                                num_strips = strip_list[box_num][3]
+                                # print("UES")
+                                while num_strips > 0 and curr_weight < max_weight:
+                                    ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
+                                    z += box_height
+                                    num_strips -= 1
+                                    curr_weight+=strip_list[box_num][9]
+                                    vol_occ+=box_length*box_width*box_height
+
+                                # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
+                                x += box_width
+                                z = 0
+                                total_strips -= 1
+                                prev_row[len(prev_row)-1][2]=deepcopy(x)
+                                rem=deepcopy(abs(x-end_x))
+                                # storage_strip[len(storage_strip)-1][2]=deepcopy(x)
+
+
+                        p_y=0
+                        if went_in_1 is True:
+                            p_y = deepcopy(y+box_length)
+                        elif went_in_1 is False and went_in_2 is False:
+                            p_y = deepcopy(box_length)
+                        else:
+                            p_y = deepcopy(y+box_length)
+
+
+
+
+                        y,end_x,row,prev_row,prev_y,prev_row_num= (findoptlen(prev_row,x,y,end_x,box_width,row,prev_y,prev_row_num))
+                        # print("y_diff",abs(p_y-y))
+                        # print("rem",rem)
+
+                        if x!=0 and went_in_1 is True:
+                            # print("went_1_true:",y-box_length-p_y)
+                            vol_wasted += abs(y-box_length-p_y)*rem*height_container
+                        elif x!=0 and went_in_1 is False and went_in_2 is False:
+                            # print("went_1_false and went_2_false",p_y)
+                            vol_wasted += abs(p_y)*rem*height_container
+                        else:
+                            if x!=0:
+                                # print("all others",y-p_y)
+                                vol_wasted += abs(y-p_y)*rem*height_container
+
+                        y_min = min(y_min,y)
+
+                
+                        if end_x+box_width>=width_container:  
+                            end_x = deepcopy(width_container)
+                        
+                        # change = invertOrNot(x,end_x,box_num,box_length,box_width,box_height,width_container,total_strips)
+                
+
+                        # if change == True:
+                        #     temp = deepcopy(box_length)
+                        #     box_length = deepcopy(box_width)
+                        #     box_width = deepcopy(temp)
+
+
+                        y = y -1-box_length
+                        y_min = min(y_min,y)
+
+                        prev_row.append([x,y])
+                        storage_strip.append([x,y])
+
             
 
         prev_row[len(prev_row)-1].append(x)
@@ -494,7 +748,7 @@ def perform_computation(data,truck_spec):
         df.at[box_num, 'Rem_Strips'] =total_strips
         df.at[box_num,'Marked'] = 0
         # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
-        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df
+        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted
 
 
 
@@ -521,13 +775,16 @@ def perform_computation(data,truck_spec):
         return ax
 
 
-    def create_bottom_view(ax,y_min):
-        # Adjust the viewing angle for bottom view
+    def create_bottom_view(ax, vol_occ, vol_wasted):
+    # Adjust the viewing angle for bottom view
         ax.view_init(elev=90, azim=180)
 
-        ax.text2D(0.05, 0.95, f'y_min: {y_min:.2f}', transform=ax.transAxes, fontsize=12,
+        # Create text annotation including vol_occ and vol_wasted
+        text = f'vol_occ: {vol_occ:.2f}%\nvol_wasted: {vol_wasted:.2f}m^3'
+        ax.text2D(0.05, 0.95, text, transform=ax.transAxes, fontsize=12,
                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
         
+        # Save the plot as an image with a fixed filename
         filename = 'static/bottom_view.png'
         plt.savefig(filename)
 
@@ -545,7 +802,8 @@ def perform_computation(data,truck_spec):
     prev_y =-1
     y_min = 1e5
     row =0
-    area_covered = 0
+    vol_occ = 0
+    vol_wasted=0
     prev_row_num=-1
     #Creating Plot
     ax = create_plot(container_toFit)
@@ -570,15 +828,17 @@ def perform_computation(data,truck_spec):
             y_min = min(y_min,y)
 
             prev_row.append([x,y])
-            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min,df)
+            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
         else:
             if(i!=0 and row==0):
                 y = y-1+prev_row[len(prev_row)-1][4]-strip_list[ans][0]
             prev_row.append([x,y])
-            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min,df)
+            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
     if y_min <0:
         y_min = 0
-    filename_final = create_bottom_view(ax,y_min)
+    vol_occ_curr =round(vol_occ/(container_toFit.length*container_toFit.width*container_toFit.height),2)*100
+    vol_wasted=round(vol_wasted*pow(10,-9),2)
+    filename_final = create_bottom_view(ax,vol_occ_curr,vol_wasted)
 
 
     for i in range(len(df)):
@@ -860,7 +1120,7 @@ def load_backend_function():
 
 
 
-    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,strip_storage,prev_y,prev_row,prev_row_num,area_covered,y_min,df):
+    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,strip_storage,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted):
         width_container = float(container.width)
         height_container = float(container.height)
         depth_container = float(container.length)
@@ -907,12 +1167,13 @@ def load_backend_function():
                         z += box_height
                         num_strips -= 1
                         curr_weight+=strip_list[box_num][9]
+                        vol_occ+=box_length*box_width*box_height
+
                     # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                     # x += box_width.
                     z = 0
                     total_strips -= 1
                     # prev_row[len(prev_row)-1][2]=deepcopy(x)
-                    area_covered+=box_length*box_width
                     if total_strips==0:
                         x+=box_width
                         continue
@@ -932,6 +1193,7 @@ def load_backend_function():
                             z += box_height
                             num_strips -= 1
                             curr_weight+=strip_list[box_num][9]
+                            vol_occ+=box_length*box_width*box_height
                         x+=box_width
                         # print("Yes goes in",end_x)
                         # print("Y_before",y)
@@ -942,7 +1204,7 @@ def load_backend_function():
                         # print("Y_after",y)
 
                         total_strips-=1
-                        area_covered+=box_length*box_width
+
                     
                     # if total_strips==0:
 
@@ -954,9 +1216,10 @@ def load_backend_function():
                         z += box_height
                         num_strips -= 1
                         curr_weight+=strip_list[box_num][9]
+                        vol_occ+=box_length*box_width*box_height
+
                     # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                     x += box_width
-                    area_covered+=box_length*box_width
                     z = 0
                     total_strips -= 1
 
@@ -966,6 +1229,11 @@ def load_backend_function():
                 # x = end_x
                 y_min = min(y_min,y)
                 if x+box_width> width_container:
+                    # print("Inside1",end_x-x)
+                    # print("vol_wasted",abs(width_container-x)*box_length*height_container)
+
+                    vol_wasted += abs(width_container-x)*box_length*height_container
+
                     x = width_container
                 
 
@@ -993,10 +1261,23 @@ def load_backend_function():
 
                 # print("INdex",index)
                 # print("prev_row_num",prev_row_num)
-                if end_x-x< (x+box_width)-end_x:  ##Checks the better one between putting one extra or shifting according to the previous row
+                rem=0
+                rem_y=0
+                went_in_1 = False
+                went_in_2 =False
+                if x!=0 and end_x-x< (x+box_width)-end_x: 
+                     ##Checks the better one between putting one extra or shifting according to the previous row
+                    # print("Inside2",end_x-x)
+                    # vol_wasted += (end_x-x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
+                    rem=deepcopy(abs(x-end_x))
+                    if len(prev_row) >1 and index<len(prev_row) and prev_row[index][6] == prev_row_num and prev_row[index][3] > prev_y:
+                        went_in_1=True
                     x +=(end_x-x)
                 else:
                     if len(prev_row) >1 and index<len(prev_row) and prev_row[index][6] == prev_row_num and prev_row[index][3] > prev_y and x + box_width <= width_container:
+                        went_in_2=True
+                        # print("Inside3",end_x-x)
+                        # vol_wasted += (x+box_width-end_x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
                         num_strips = strip_list[box_num][3]
                         # print("UES")
                         while num_strips > 0 and curr_weight < max_weight:
@@ -1004,17 +1285,43 @@ def load_backend_function():
                             z += box_height
                             num_strips -= 1
                             curr_weight+=strip_list[box_num][9]
+                            vol_occ+=box_length*box_width*box_height
+
                         # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                         x += box_width
                         z = 0
                         total_strips -= 1
                         prev_row[len(prev_row)-1][2]=deepcopy(x)
+                        rem=deepcopy(abs(x-end_x))
                         # storage_strip[len(storage_strip)-1][2]=deepcopy(x)
 
-                        area_covered+=box_length*box_width
 
-          
+                p_y=0
+                if went_in_1 is True:
+                    p_y = deepcopy(y+box_length)
+                elif went_in_1 is False and went_in_2 is False:
+                    p_y = deepcopy(box_length)
+                else:
+                    p_y = deepcopy(y+box_length)
+
+
+
+
                 y,end_x,row,prev_row,prev_y,prev_row_num= (findoptlen(prev_row,x,y,end_x,box_width,row,prev_y,prev_row_num))
+                # print("y_diff",abs(p_y-y))
+                # print("rem",rem)
+
+                if x!=0 and went_in_1 is True:
+                    print("went_1_true:",y-box_length-p_y)
+                    vol_wasted += abs(y-box_length-p_y)*rem*height_container
+                elif x!=0 and went_in_1 is False and went_in_2 is False:
+                    print("went_1_false and went_2_false",p_y)
+                    vol_wasted += abs(p_y)*rem*height_container
+                else:
+                    if x!=0:
+                        print("all others",y-p_y)
+                        vol_wasted += abs(y-p_y)*rem*height_container
+
                 y_min = min(y_min,y)
 
          
@@ -1036,6 +1343,211 @@ def load_backend_function():
                 prev_row.append([x,y])
                 storage_strip.append([x,y])
 
+
+        if y<0 and total_strips!=0:
+            y+=box_length
+            y-=box_width
+            if y>0:
+                temp = deepcopy(box_length)
+                box_length = deepcopy(box_width)
+                box_width = deepcopy(temp)
+                while total_strips > 0 and y > 0:
+                    if x + box_width <= end_x and x + box_width <= width_container:  ## added the max weight check constraints
+                        # print("prev_row",prev_row)
+                        if len(prev_row) >1 and prev_row[len(prev_row)-2][1]>=0 and y-prev_row[len(prev_row)-2][1] > box_length and row== prev_row[len(prev_row)-2][6]:
+                            # x-= box_width
+                            
+                            # print("x",x)
+                            # print("y",y)
+
+                            # print("yes went inside")
+                            # y = y-box_length
+                            num_strips = strip_list[box_num][3]
+                            # print("UES")
+                            while num_strips > 0 and curr_weight < max_weight:
+                                ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
+                                z += box_height
+                                num_strips -= 1
+                                curr_weight+=strip_list[box_num][9]
+                                vol_occ+=box_length*box_width*box_height
+
+                            # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
+                            # x += box_width.
+                            z = 0
+                            total_strips -= 1
+                            # prev_row[len(prev_row)-1][2]=deepcopy(x)
+                            if total_strips==0:
+                                x+=box_width
+                                continue
+                            if total_strips>0:
+                                if y-box_length>=0:
+                                    y-=box_length
+                                else:
+                                    continue
+                                prev_row[len(prev_row)-1][1]=deepcopy(y)
+                                storage_strip[len(storage_strip)-1][1]=deepcopy(y)
+                                
+
+                                num_strips = strip_list[box_num][3]
+                                # print("UES")
+                                while num_strips > 0 and curr_weight < max_weight:
+                                    ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
+                                    z += box_height
+                                    num_strips -= 1
+                                    curr_weight+=strip_list[box_num][9]
+                                    vol_occ+=box_length*box_width*box_height
+                                x+=box_width
+                                # print("Yes goes in",end_x)
+                                # print("Y_before",y)
+
+                                if x+box_width<=end_x:
+                                    y+=box_length
+                                z=0
+                                # print("Y_after",y)
+
+                                total_strips-=1
+
+                            
+                            # if total_strips==0:
+
+
+                        else:
+                            num_strips = strip_list[box_num][3]
+                            while num_strips > 0 and curr_weight < max_weight:
+                                ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
+                                z += box_height
+                                num_strips -= 1
+                                curr_weight+=strip_list[box_num][9]
+                                vol_occ+=box_length*box_width*box_height
+
+                            # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
+                            x += box_width
+                            z = 0
+                            total_strips -= 1
+
+                        
+
+                    else: 
+                        # x = end_x
+                        y_min = min(y_min,y)
+                        if x+box_width> width_container:
+                            # print("Inside1",end_x-x)
+                            # print("vol_wasted",abs(width_container-x)*box_length*height_container)
+
+                            vol_wasted += abs(width_container-x)*box_length*height_container
+
+                            x = width_container
+                        
+
+                        prev_row[len(prev_row)-1].append(x)
+                        prev_row[len(prev_row)-1].append(y)
+                        prev_row[len(prev_row)-1].append(box_length)
+                        prev_row[len(prev_row)-1].append(1)
+                        prev_row[len(prev_row)-1].append(row)
+                        
+                        
+
+                        # print("Y",y)
+                        # print("prev_row_before",prev_row)
+                        # print("prev_y",prev_y)
+                        # print("x",x)
+                        # print("Row",row)
+                        index=0
+                        if x + box_width > width_container:
+                            # efficiency_new.append([y_min,row])
+                            row+=1
+                            x = 0
+                            z = 0
+                        while index<len(prev_row) and (prev_row[index][6]!=row-1):
+                            index+=1
+
+                        # print("INdex",index)
+                        # print("prev_row_num",prev_row_num)
+                        rem=0
+                        rem_y=0
+                        went_in_1 = False
+                        went_in_2 =False
+                        if x!=0 and end_x-x< (x+box_width)-end_x: 
+                            ##Checks the better one between putting one extra or shifting according to the previous row
+                            # print("Inside2",end_x-x)
+                            # vol_wasted += (end_x-x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
+                            rem=deepcopy(abs(x-end_x))
+                            if len(prev_row) >1 and index<len(prev_row) and prev_row[index][6] == prev_row_num and prev_row[index][3] > prev_y:
+                                went_in_1=True
+                            x +=(end_x-x)
+                        else:
+                            if len(prev_row) >1 and index<len(prev_row) and prev_row[index][6] == prev_row_num and prev_row[index][3] > prev_y and x + box_width <= width_container:
+                                went_in_2=True
+                                # print("Inside3",end_x-x)
+                                # vol_wasted += (x+box_width-end_x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
+                                num_strips = strip_list[box_num][3]
+                                # print("UES")
+                                while num_strips > 0 and curr_weight < max_weight:
+                                    ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
+                                    z += box_height
+                                    num_strips -= 1
+                                    curr_weight+=strip_list[box_num][9]
+                                    vol_occ+=box_length*box_width*box_height
+
+                                # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
+                                x += box_width
+                                z = 0
+                                total_strips -= 1
+                                prev_row[len(prev_row)-1][2]=deepcopy(x)
+                                rem=deepcopy(abs(x-end_x))
+                                # storage_strip[len(storage_strip)-1][2]=deepcopy(x)
+                            else:
+                                rem=deepcopy(abs(x-end_x))
+
+
+
+                        p_y=0
+                        if went_in_1 is True:
+                            p_y = deepcopy(y+box_length)
+                        elif went_in_1 is False and went_in_2 is False:
+                            p_y = deepcopy(box_length)
+                        else:
+                            p_y = deepcopy(y+box_length)
+
+
+
+
+                        y,end_x,row,prev_row,prev_y,prev_row_num= (findoptlen(prev_row,x,y,end_x,box_width,row,prev_y,prev_row_num))
+                        # print("y_diff",abs(p_y-y))
+                        # print("rem",rem)
+
+                        if x!=0 and went_in_1 is True:
+                            # print("went_1_true:",y-box_length-p_y)
+                            vol_wasted += abs(y-box_length-p_y)*rem*height_container
+                        elif x!=0 and went_in_1 is False and went_in_2 is False:
+                            # print("went_1_false and went_2_false",p_y)
+                            vol_wasted += abs(p_y)*rem*height_container
+                        else:
+                            if x!=0:
+                                # print("all others",y-p_y)
+                                vol_wasted += abs(y-p_y)*rem*height_container
+
+                        y_min = min(y_min,y)
+
+                
+                        if end_x+box_width>=width_container:  
+                            end_x = deepcopy(width_container)
+                        
+                        # change = invertOrNot(x,end_x,box_num,box_length,box_width,box_height,width_container,total_strips)
+                
+
+                        # if change == True:
+                        #     temp = deepcopy(box_length)
+                        #     box_length = deepcopy(box_width)
+                        #     box_width = deepcopy(temp)
+
+
+                        y = y -1-box_length
+                        y_min = min(y_min,y)
+
+                        prev_row.append([x,y])
+                        storage_strip.append([x,y])
+
             
 
         prev_row[len(prev_row)-1].append(x)
@@ -1044,28 +1556,31 @@ def load_backend_function():
         prev_row[len(prev_row)-1].append(1)
         prev_row[len(prev_row)-1].append(row)
         y_min = min(y_min,y)
-        df.at[box_num, 'Rem_Strips'] =total_strips
-        df.at[box_num,'Marked'] = 0
-        # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
-        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df
-
-
-
-    def create_bottom_view(ax, iteration,y_min):
-        # Adjust the viewing angle for bottom view
-        ax.view_init(elev=90, azim=180)
-
-        # Save the plot as an image with a filename including the iteration number
-        ax.text2D(0.05, 0.95, f'Iteration: {iteration}\ny_min: {y_min:.2f}', transform=ax.transAxes, fontsize=12,
-              verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
         
+        # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
+        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,total_strips,vol_wasted
+
+
+
+    def create_bottom_view(ax, iteration, vol_occ_curr, vol_wasted):
+    # Adjust the viewing angle for bottom view
+        ax.view_init(elev=90, azim=180)
+        
+        # Create text annotation including iteration number, vol_occ_curr, and vol_wasted
+        text = f'Iteration: {iteration}\nvol_occ_curr: {vol_occ_curr:.2f}%\nvol_wasted: {vol_wasted:.2f}m^3'
+        
+        ax.text2D(0.05, 0.95, text, transform=ax.transAxes, fontsize=12,
+                verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+        
+        # Save the plot as an image with a filename including the iteration number
         filename = f'static/bottom_view_iteration_{iteration}.png'
         plt.savefig(filename)
-
+        
         # Close the plot to free up resources
         plt.close()
 
         return filename  # Return the filename for reference
+
 
     def generate_colors(n):
         distinct_colors = ['red', 'blue', 'yellow', 'orange', 'green', 'violet', 'white', 'indigo', 'cyan', 'magenta', 'lime', 'pink', 'teal', 'lavender', 'brown', 'gray', 'black']
@@ -1094,11 +1609,15 @@ def load_backend_function():
     perms = list(perms)
 
     efficiency = []
-    eff_AC=[]
+    df_stored=[]
     all_y_min=[]
+    vol_eff =[]
+    wasted_vol = []
+    
 
     for i in range(len(perms)):
         # if i !=18:
+        print(perms[i])
         #     continue
         # print("iteration: ",i)
         # print("Perm",perms[i])
@@ -1106,9 +1625,11 @@ def load_backend_function():
         #     if y <0:
         #         y_min = min(y,y_min)
         #         break
+        tmp= deepcopy(df)
+        vol_wasted=0
         stored_plac = []
         storage_strip=[]
-        area_covered = 0
+        vol_occ = 0
         y_min = 1e5
         prev_row= []
         end_x = float(container_toFit.width)
@@ -1132,6 +1653,8 @@ def load_backend_function():
         x,z= 0,0
         # print("Perm",perms[i])
         for j in range(len(perms[i])):
+            # print("Memory usage at {i}:", memory_usage(), "MB")
+
             # print(perms[i][j])
             # print(prev_row)
             # if j==4:
@@ -1145,6 +1668,9 @@ def load_backend_function():
             if j == 0:
                 y=deepcopy(length_container-strip_list[perms[i][j]][0]-1)
                 y_min = min(y_min,y)
+            
+            if y<0:
+                break
 
             
             if(j!=0 and row!=0):
@@ -1152,41 +1678,62 @@ def load_backend_function():
                 y_min = min(y_min,y)
                 prev_row.append([x,y])
                 storage_strip.append([x,y])
-                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min,df)
+                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,total_strips,vol_wasted= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
             else:
                 if(j!=0 and row==0):
                     y = y-1+prev_row[len(prev_row)-1][4]-strip_list[perms[i][j]][0]
                 y_min = min(y_min,y)
                 prev_row.append([x,y])
                 storage_strip.append([x,y])
-                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,area_covered,y_min,df= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,area_covered,y_min,df)
-
+                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,total_strips,vol_wasted= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
+            
+            tmp.at[perms[i][j], 'Rem_Strips'] =total_strips
+            tmp.at[perms[i][j],'Marked'] = 0
+        
+        for m in range(len(df)):
+            if tmp.at[m,'Marked']==1:
+                tmp.at[m,'Rem_Strips'] = tmp.at[m,'TotalNumStrips']
+        
+        tmp.drop(columns=['Marked'], inplace=True)
+        tmp =tmp.to_html()
+        df_stored.append(tmp)
  
         if y_min <0:
             y_min = 0        
-        create_bottom_view(ax, i,y_min)
+        vol_occ_curr =round(vol_occ/(container_toFit.length*container_toFit.width*container_toFit.height),2)*100
+        create_bottom_view(ax, i,vol_occ_curr,round(vol_wasted*pow(10,-9),2))
+        wasted_vol.append(round(vol_wasted*pow(10,-9),2))
         all_y_min.append(y_min)
+        vol_eff.append(vol_occ_curr)
+        # print("Memory usage:", memory_usage(), "MB")
         ax.clear()
     
-    max_efficiency3 = max(all_y_min)
-    max_index3 = all_y_min.index(max_efficiency3)
+    # max_efficiency3 = max(all_y_min)
+    # max_index3 = all_y_min.index(max_efficiency3)
+    max_vol_wasted = min(wasted_vol)
+    max_index3 = wasted_vol.index(max_vol_wasted)
     # print("Least Y occupied:", max_efficiency3)
     # print("Iteration Number (0-indexed):", max_index3)
     iteration_number= max_index3
-    for i in range(len(df)):
-        if df.at[i,'Marked']==1:
-            df.at[i,'Rem_Strips'] = df.at[i,'TotalNumStrips']
-    df.drop(columns=['Marked'], inplace=True)
+    # for i in range(len(df)):
+    #     if df.at[i,'Marked']==1:
+    #         df.at[i,'Rem_Strips'] = df.at[i,'TotalNumStrips']
+    # df.drop(columns=['Marked'], inplace=True)
 
 
-    df_html = df.to_html()  
+    # df_html = df.to_html()  
+    final = df_stored[max_index3]
 
     response = {
     'show_optimal_solution': True,  # Set this to True if you want to display the optimal solution
-    'df_html': df_html,  # DataFrame converted to HTML format
+    'df_html': final,  # DataFrame converted to HTML format
     'iteration_number': iteration_number
     }
-    print("Memory usage:", memory_usage(), "MB")
+    print("Memory usage at end:", memory_usage(), "MB")
+
+    # Print maximum memory usage
+    print("Max memory usage:", max_memory_usage, "MB")
+
     
     return jsonify(response)
 
@@ -1230,5 +1777,5 @@ def upload():
 
     return render_template('output.html', table=df.to_html(classes='data'))
 
-# if __name__ == '__main__':
-#     app.run(debug=True)
+if __name__ == '__main__':
+    app.run(debug=True)
