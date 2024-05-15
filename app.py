@@ -1312,14 +1312,14 @@ def load_backend_function():
                 # print("rem",rem)
 
                 if x!=0 and went_in_1 is True:
-                    print("went_1_true:",y-box_length-p_y)
+                    # print("went_1_true:",y-box_length-p_y)
                     vol_wasted += abs(y-box_length-p_y)*rem*height_container
                 elif x!=0 and went_in_1 is False and went_in_2 is False:
-                    print("went_1_false and went_2_false",p_y)
+                    # print("went_1_false and went_2_false",p_y)
                     vol_wasted += abs(p_y)*rem*height_container
                 else:
                     if x!=0:
-                        print("all others",y-p_y)
+                        # print("all others",y-p_y)
                         vol_wasted += abs(y-p_y)*rem*height_container
 
                 y_min = min(y_min,y)
