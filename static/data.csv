@@ -1,5 +1,2 @@
-Gross Weight (in KGs) ,Net Weight  (in KGs) ,Volume (in m^3),Temperature (in deg  C),Length (in cm),Width  (in cm),Height  (in cm),Number of Cases ,"Rotation Allowed (1 - YES, 0 - NO)"
-10.094,8.58,0.023,1,396,199,287,421,1
-12.75,10.6,0.035,2,450,225,320,400,1
-6.8,5.9,0.015,3,300,150,210,478,1
-12.2,5.9,0.015,3,123,234,345,500,1
+Gross Weight (in KGs),Net Weight  (in KGs) ,Volume (in m^3),Temperature (in deg  C),Length (in cm),Width  (in cm),Height  (in cm),Number of Cases ,"Rotation Allowed (1 - YES, 0 - NO)"
+100,8.58,0.023,1,396,199,287,600,1

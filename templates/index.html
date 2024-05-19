@@ -12,61 +12,74 @@
             padding: 20px;
         }
 
+        .container {
+            max-width: 1500px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
         h1 {
             text-align: center;
             margin-bottom: 30px;
         }
 
-        #containerForm {
-            background-color: #ffffff;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-        }
-        #truckDimensions {
-            text-align: center; /* Center-align the content */
-        }
-
-        #truckDimensions img {
-            display: block; /* Make the image a block element */
-            margin: 0 auto; /* Center-align the image */
-        }
-
-        #truckSpec{
-            max-width: 300 px;
-        }
-
-        .input-row {
-            margin-bottom: 20px;
+        form {
+            text-align: center;
         }
 
         label {
-            display: inline-block;
-            width: 150px;
-            text-align: right;
-            margin-right: 20px;
-            margin-bottom: 5px;
+            display: block;
+            width: 200px;
+            margin: 10px auto;
             color: #555555;
         }
 
-        .checkbox-label {
-            margin-left: 30px; /* Adjust the left margin to create space */
-        }
-
-        input, button, select {
-            width: 200px;
-            margin-bottom: 5px;
+        input[type="number"],
+        input[type="text"],
+        button,
+        select {
+            width: calc(33.33% - 20px); /* Each input cell occupies one-third of the available space */
+            margin: 10px auto;
             padding: 8px;
             border: 1px solid #cccccc;
             border-radius: 5px;
             font-size: 16px;
         }
 
-        input[type="number"] {
+        #numTypes {
             width: 80px;
         }
 
-        input[type="submit"], button[type="submit"] {
+        #file {
+            width: calc(100% - 20px);
+        }
+
+        #totalContainers {
+            width: 80px;
+        }
+
+        #typeInputs {
+            max-width: 700px;
+            margin-right: 200px;
+            text-align: center;
+        }
+
+        .input-row {
+            width: 1300px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .checkbox-label {
+            margin-left: 30px;
+        }
+
+        button[type="submit"] {
             background-color: #4CAF50;
             color: white;
             border: none;
@@ -76,17 +89,35 @@
             font-size: 16px;
         }
 
-        input[type="submit"]:hover, button[type="submit"]:hover {
+        button[type="submit"]:hover {
             background-color: #45a049;
         }
-        form {
-            text-align: center;
+
+        #file-container {
+            display: flex;
+            justify-content: center; /* Center-align horizontally */
+            align-items: center; /* Center-align vertically */
+            margin-bottom: 10px; /* Adjust margin as needed */
         }
 
+        #file {
+            width: calc(100% - 20px);
+        }
 
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
+        .container-type-select,
+        .container-count-input {
+            width: 150px; /* Smaller size for type and count inputs */
+        }
+
+        .dimensions img {
+            max-width: 150px; /* Smaller size for the image */
+            max-height: 150px;
+            margin-top: 10px; /* Add padding between image and other inputs */
+        }
+
+        .container-type-label,
+        .container-count-label {
+            padding-right: 10px; /* Add padding between labels and inputs */
         }
     </style>
     <script>
@@ -133,6 +164,7 @@
 
             return label;
         }
+
         var truck_specs = {
             "General Purpose container 20'": {
                 "length_container": 5900,
@@ -192,32 +224,139 @@
             }
             return null;
         }
+
+        function generateTypeInputs() {
+            var totalContainersInput = document.getElementById("totalContainers");
+            var totalContainers = totalContainersInput.value;
+            var typeInputsDiv = document.getElementById("typeInputs");
+
+            // Clear previous inputs
+            typeInputsDiv.innerHTML = "";
+
+            // Generate inputs for each container type
+            for (var i = 0; i < totalContainers; i++) {
+                var containerDiv = document.createElement("div");
+                containerDiv.classList.add("input-row");
+
+                var typeLabel = document.createElement("label");
+                typeLabel.textContent = "Type of Container " + (i + 1) + ":";
+                typeLabel.classList.add("container-type-label");
+                containerDiv.appendChild(typeLabel);
+
+                var typeSelect = document.createElement("select");
+                typeSelect.name = "containerType" + (i + 1);
+                typeSelect.required = true;
+                typeSelect.classList.add("container-type-select");
+                typeSelect.onchange = updateTypeOptions; // Add onchange event
+                containerDiv.appendChild(typeSelect);
+
+                // Add options to select
+                for (var type in truck_specs) {
+                    var option = document.createElement("option");
+                    option.value = type;
+                    option.textContent = type;
+                    typeSelect.appendChild(option);
+                }
+
+                var countLabel = document.createElement("label");
+                countLabel.textContent = "Number of Container " + (i + 1) + ":";
+                countLabel.classList.add("container-count-label");
+                containerDiv.appendChild(countLabel);
+
+                var countInput = document.createElement("input");
+                countInput.type = "number";
+                countInput.name = "containerCount" + (i + 1);
+                countInput.min = "1";
+                countInput.required = true;
+                countInput.classList.add("container-count-input");
+                containerDiv.appendChild(countInput);
+
+                var dimensionsDiv = document.createElement("div");
+                dimensionsDiv.classList.add("dimensions");
+                dimensionsDiv.id = "dimensions" + (i + 1);
+                containerDiv.appendChild(dimensionsDiv);
+
+                typeInputsDiv.appendChild(containerDiv);
+            }
+
+            updateTypeOptions(); // Update options on initial load
+        }
+
+        function updateTypeOptions() {
+            var selects = document.querySelectorAll('.container-type-select');
+            var selectedValues = new Set();
+
+            // Gather all selected values
+            selects.forEach(function (select) {
+                if (select.value) {
+                    selectedValues.add(select.value);
+                }
+            });
+
+            // Update the options for each select
+            selects.forEach(function (select) {
+                var currentValue = select.value;
+                select.innerHTML = '';
+
+                for (var type in truck_specs) {
+                    if (!selectedValues.has(type) || type === currentValue) {
+                        var option = document.createElement('option');
+                        option.value = type;
+                        option.textContent = type;
+                        select.appendChild(option);
+                    }
+                }
+
+                // Set the current value back
+                select.value = currentValue;
+
+                // Show dimensions and image
+                var dimensionsDiv = document.getElementById('dimensions' + (Array.prototype.indexOf.call(selects, select) + 1));
+                if (dimensionsDiv) {
+                    var dimensions = getTruckDimensions(select.value);
+                    dimensionsDiv.innerHTML = '<p>' + dimensions + '</p>';
+                    var imgSrc = truck_specs[select.value].image;
+                    var img = document.createElement("img");
+                    img.src = imgSrc;
+                    img.alt = select.value;
+                    dimensionsDiv.appendChild(img);
+                }
+            });
+        }
+
+        window.onload = function() {
+            var totalContainersInput = document.getElementById("totalContainers");
+            totalContainersInput.setAttribute("max", Object.keys(truck_specs).length);
+            generateTypeInputs(); // Generate initial type inputs
+        };
     </script>
 </head>
 <body>
-    <div class="container">
-        <h1>Container Builder</h1>
-        <form id="containerForm" action="/upload" method="POST">
-            <label for="numTypes">Number of Types of Boxes:</label>
-            <input type="number" id="numTypes" name="numTypes" min="1" value="1" onchange="generateInputs()">
-            <div id="productForm">
-                <!-- Dynamic inputs will be generated here -->
-            </div>
-            <button type="submit">Submit</button>
-        </form>
-        <form id="fileUploadForm" enctype="multipart/form-data" style="margin-top: 30px;" action="/upload" method="POST">
+<div class="container">
+    <h1>Container Builder</h1>
+    <form id="containerForm" action="/upload" method="POST">
+        <label for="numTypes">Number of Types of Boxes:</label>
+        <input type="number" id="numTypes" name="numTypes" min="1" value="1" onchange="generateInputs()">
+        <div id="productForm">
+            <!-- Dynamic inputs will be generated here -->
+        </div>
+        <button type="submit">Submit</button>
+    </form>
+    <form id="fileUploadForm" enctype="multipart/form-data" style="margin-top: 30px;" action="/upload" method="POST">
+        <div id="file-container">
             <label for="file">Upload CSV or Excel File:</label>
             <input type="file" id="file" name="file">
-            <label for="truckSpec">Select Truck Specification:</label>
-            <select id="truckSpec" name="truckSpec" onchange="showTruckDimensions()">
-                <option value="General Purpose container 20'">General Purpose container 20'</option>
-                <option value="General Purpose container 40'">General Purpose container 40'</option>
-                <option value="High - Cube General Purpose container 40'">High - Cube General Purpose container 40'</option>
-            </select>
-            <div id="truckDimensions"></div> 
-            <br>
-            <button type="submit">Upload</button>
-        </form>
-    </div>
+        </div>
+
+        <label for="totalContainers" class="total-container-label">Total Type of Containers:</label>
+        <input type="number" id="totalContainers" name="totalContainers" min="1" value="1" onchange="generateTypeInputs()" class="total-container-input">
+
+        <div id="typeInputs">
+            <!-- Dynamic inputs for each container type will be generated here -->
+        </div>
+
+        <button type="submit">Upload</button>
+    </form>
+</div>
 </body>
 </html>

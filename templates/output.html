@@ -45,15 +45,15 @@
             display: block;
             margin: 10px auto;
             max-width: 100%;
-            /* height: 300px; Set desired height */
-            /* object-fit: cover; /* Crop image */
-            /* object-position: center; Center image */ 
-            border: 2px solid #dddddd; /* Border style */
-            padding: 5px; /* Optional padding */
+            border: 2px solid #dddddd;
+            padding: 5px;
         }
         .progress-bar-container {
             width: 50%;
             margin: 20px auto;
+        }
+        .image {
+            display: none;
         }
         .progress-bar {
             width: 100%;
@@ -66,6 +66,29 @@
             height: 20px;
             background-color: #4CAF50;
         }
+        .image_iter {
+            max-width: 100%;
+            padding: 0;
+        }
+        #output {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .data {
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: #fff;
+        }
+        h1 {
+            text-align: center;
+        }
+        img {
+            margin: 10px 0;
+            max-width: 100%;
+            height: auto;
+        }
     </style>
 </head>
 <body>
@@ -74,16 +97,21 @@
     </header>
     <div class="table-container">
         <h2>Heuristic Solution</h2>
-        {{ table|safe }}
+        {% for table in tables %}
+            {{ table | safe }}  <!-- Render each table -->
+        {% endfor %}
     </div>
     <div class="container">
-        <img src="{{ url_for('static', filename='bottom_view.png') }}" alt="Bottom View Plot">
+        {% for path in img_paths %}
+            <img src="{{ path }}" alt="Image" class="image">
+        {% endfor %}
     </div>
-    <div class="table-container" id="tableContainer">
+    <button class="nextButton" onclick="showNextImage()">Next</button>
+    <div class="table-container" id="tableContainers">
         <!-- Your table content here -->
     </div>
-    <div class="container">
-        <img id="iterationImage" src="">
+    <div id="output">
+        <!-- DataFrames and images will be appended here -->
     </div>
     <div class="progress-bar-container" id="progressBarContainer">
         <p>Loading the optimal solution...</p>
@@ -92,40 +120,67 @@
         </div>
     </div>
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            var xhr = new XMLHttpRequest();
-            xhr.open("POST", "/load_backend_function", true);
-            xhr.setRequestHeader("Content-Type", "application/json");
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
-                    var response = JSON.parse(xhr.responseText);
-                    if (response.show_optimal_solution) {
-                        // Display the iteration number and image
-                        var iterationNumber = response.iteration_number;
-                        var imageUrl = "/static/bottom_view_iteration_" + iterationNumber + ".png";
-                        document.getElementById("iterationImage").src = imageUrl;
-                        // Load DataFrame into table container
-                        var tableContainer = document.getElementById("tableContainer");
-                        tableContainer.innerHTML = response.df_html;
-                        // Hide the progress bar
-                        document.getElementById("progressBarContainer").style.display = "none";
-                        // Insert the "Optimal Solution" heading before the table
-                        var optimalSolutionHeading = document.createElement("h2");
-                        optimalSolutionHeading.textContent = "Optimal Solution";
-                        tableContainer.parentNode.insertBefore(optimalSolutionHeading, tableContainer);
-                    }
-                }
-            };
-            xhr.send();
-        });
+        var currentImageIndex = 0;
+        var images = document.querySelectorAll('.image');
 
-        // Function to reload the page
-        function reloadPage() {
-            location.reload();
+        // Show the first image immediately
+        images[currentImageIndex].style.display = 'block';
+
+        function showNextImage() {
+            currentImageIndex++; // Increment the index for the next image
+
+            // Show the next image
+            if (currentImageIndex < images.length) {
+                images[currentImageIndex].style.display = 'block';
+            } else {
+                // Hide the "Next" button when all images have been displayed
+                document.querySelector('.nextButton').style.display = 'none';
+            }
         }
 
-        // Event listener for the "Show Optimal Solution" button
-        document.getElementById("showOptimalSolution").addEventListener("click", reloadPage);
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/load_backend_function', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const outputDiv = document.getElementById('output');
+                outputDiv.innerHTML = '';  // Clear previous output
+
+                if (data.show_optimal_solution) {
+                    // Add the "Optimal Solution" heading
+                    const heading = document.createElement('h2');
+                    heading.textContent = 'Optimal Solution';
+                    outputDiv.appendChild(heading);
+
+                    data.df_html_array.forEach(dfHtml => {
+                        const dfDiv = document.createElement('div');
+                        dfDiv.classList.add('data');
+                        dfDiv.innerHTML = dfHtml;
+                        outputDiv.appendChild(dfDiv);
+                    });
+
+                    data.image_Array.forEach(imgPath => {
+                        const img = document.createElement('img');
+                        img.src = imgPath;
+                        outputDiv.appendChild(img);
+                    });
+
+                    // Hide the progress bar once data is loaded
+                    document.getElementById('progressBarContainer').style.display = 'none';
+                } else {
+                    outputDiv.innerHTML = '<p>No optimal solution found.</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                const outputDiv = document.getElementById('output');
+                outputDiv.innerHTML = '<p>Error loading backend function.</p>';
+            });
+        });
     </script>
-    
-</body></html>
+</body>
+</html>

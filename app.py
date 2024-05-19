@@ -8,6 +8,7 @@ import json
 from copy import deepcopy
 from itertools import permutations
 import os
+from collections import defaultdict
 import psutil
 app = Flask(__name__)
 
@@ -48,16 +49,151 @@ truck_specs = {
     # Add more specifications as needed
 }
 
-@app.route('/')
-def index():
-    return render_template('index.html')
 
 
-def perform_computation(data,truck_spec):
-    # Perform computations here using the received data
-    # Example:
-    # print(data)
-    # print(truck_spec)
+def dataProcess_2(df,truck_spec):
+    length_container = truck_spec['length_container']
+    width_container = truck_spec['width_container']
+    height_container = truck_spec['height_container']
+    max_weight= truck_spec['max_weight']
+
+    # Accessing columns using bracket notation
+    length = df['Length']
+    width = df['Width']
+    height = df['Height']
+    # num_boxes_per_strip_column = df['NumOfBoxesPerStrip']
+    # total_num_strips_column = df['TotalNumStrips']
+    # rem_boxes_column = df['Rem_Boxes']
+    numOfcases = df['TotalCases']
+    # marked_column = df['Marked']
+    rotation_allowed = df['Alpha(rotation about Z-axis)']
+    gross_weight = df['GrossWeight']
+
+    
+
+    class Product:
+        def __init__(self, length, width, height,grossWeight,numberOfCases):
+            self.length = length
+            self.width = width
+            self.height = height
+            self.grossWeight = grossWeight
+            # self.netWeight=netWeight
+            # self.temperature=temperature
+            # self.volume=volume
+            self.numberOfCases=numberOfCases
+
+
+
+    class Container:
+        def __init__(self, length, width, height, max_weight, front_axle_weight, rear_axle_weight, front_axle_distance, rear_axle_distance):
+            self.length = length
+            self.width = width
+            self.height = height
+            self.max_weight = max_weight
+            self.front_axle_weight = front_axle_weight
+            self.rear_axle_weight = rear_axle_weight
+            self.front_axle_distance = front_axle_distance
+            self.rear_axle_distance = rear_axle_distance
+
+    def create_strip_list(box, container):
+
+        box_len = float(box.length)
+        box_width = float(box.width)
+        box_height = float(box.height)
+
+        container_len = float(container.length)
+        container_width = float(container.width)
+        container_height = float(container.height)
+
+        if box_len < container_len and box_width < container_width:
+            num_of_boxes_fit = container_height//box_height
+            return [box_len,box_width,box_height,num_of_boxes_fit]
+
+        else:
+            return []
+
+
+
+    front_axle_weight = 16000
+    rear_axle_weight = 12400
+    front_axle_dist = 2890
+    rear_axle_dist = 3000
+
+
+
+    container_toFit = Container(length_container,width_container,height_container,max_weight,front_axle_weight,rear_axle_weight,front_axle_dist,rear_axle_dist)
+
+
+    num_typesOfBoxes = len(gross_weight)
+    # print(num_typesOfBoxes)
+    box_set = []
+
+    for i in range(num_typesOfBoxes):
+        box = Product(length[i],width[i],height[i],gross_weight[i],numOfcases[i])
+        box_set.append(box)
+                                    
+    strip_list =[]
+    for box in box_set:
+        strips= create_strip_list(box,container_toFit)
+        strip_list.append(strips)
+
+
+
+    # print(container_toFit.length)
+
+    ## Creating simple strips (all of same type of boxes.)
+
+    def remBoxes(box_set,strip_list):
+        rem_boxes = []
+        num_of_strips_per_boxType=[]
+        i=0
+        for box in box_set:
+            num = int(box.numberOfCases)
+            # print(i)
+            num_per_strip = strip_list[i][3]
+            num_of_strips= num//num_per_strip
+            rem = num%num_per_strip
+            num_of_strips_per_boxType.append(num_of_strips)
+            rem_boxes.append(rem)
+            i+=1
+        return rem_boxes, num_of_strips_per_boxType
+
+    rem_boxes, num_strips_box = remBoxes(box_set,strip_list)
+
+    for i in range(len(strip_list)):
+        strip_list[i].append(num_strips_box[i])
+        strip_list[i].append(rem_boxes[i])
+        strip_list[i].append(int(box_set[i].numberOfCases))  # Indicating that it has been used
+        strip_list[i].append(True)
+        strip_list[i].append(rotation_allowed[i])
+        strip_list[i].append(float(box_set[i].grossWeight))
+
+    # print(strip_list)
+
+    for i in range(len(strip_list)):
+        for j in range(len(strip_list[i])):
+            strip_list[i][j] = float(strip_list[i][j])
+    # strip_list
+    df_new = pd.DataFrame(strip_list)
+    df_new.columns= ['Length','Width','Height','NumOfBoxesPerStrip','TotalNumStrips','Rem_Boxes','TotalCases','Marked', 'Alpha(rotation about Z-axis)','GrossWeight']
+    # Drop the 'Marked' column
+    # df_new.drop(columns=['Marked'], inplace=True)
+
+    # Add 'BoxNumber' column
+    df_new['BoxNumber'] = df_new.index
+
+    # Define color dictionary
+    colors = {0: 'red', 1: 'blue', 2: 'yellow', 3: 'orange', 4: 'green', 5: 'violet', 6: 'white', 7: 'indigo', 8: 'purple'}
+
+    # Add 'Color' column
+    df_new['Color'] = df_new['BoxNumber'].map(colors)
+    df_new = df_new[['BoxNumber', 'Color'] + [col for col in df_new.columns if col not in ['BoxNumber', 'Color']]]
+    df_new['Rem_Strips'] = df['Rem_Strips']
+
+    return df_new,container_toFit,strip_list
+
+
+def dataProcess_1(data,truck_spec):
     length_container = truck_spec['length_container']
     width_container = truck_spec['width_container']
     height_container = truck_spec['height_container']
@@ -193,9 +329,19 @@ def perform_computation(data,truck_spec):
     # Add 'Color' column
     df['Color'] = df['BoxNumber'].map(colors)
     df = df[['BoxNumber', 'Color'] + [col for col in df.columns if col not in ['BoxNumber', 'Color']]]
-    df['Rem_Strips'] = 0
+    df['Rem_Strips'] = df['TotalNumStrips']
 
-    # print(df)
+
+    return df,container_toFit,strip_list
+
+
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+def perform_computation(df,container_toFit,strip_list,key,roll):
 
 
     def widthRem(width_rem,strip_list):
@@ -224,9 +370,13 @@ def perform_computation(data,truck_spec):
 
         mini = -1e9
         index = 0
+        # print("strip_list_in cbd",strip_list)
         best_width = []
         for box_dim in strip_list:
-            if(box_dim[7]==0):
+            # if 
+            #     continue
+            # print(df.at[index,'Rem_Strips'])
+            if(box_dim[7]==0 and df.at[index,'Rem_Strips']==0):
                 index+=1
                 continue
             length_diff = 1e4
@@ -244,8 +394,9 @@ def perform_computation(data,truck_spec):
             best_width.append([index,perc,box_dim[1],fill,length_diff,((height_container//height)*height)])
             index+=1
         # print(strip_list)
+        # print(best_width)
         sorted_data = sorted(best_width, key=lambda x: (x[3], x[1], x[5],x[2]), reverse=True)
-    
+        # print(sorted_data)
         n =1    #Currently taking the best only based on the efficiency.
         ind =0
         maxi =1e5
@@ -256,7 +407,7 @@ def perform_computation(data,truck_spec):
                 # print("maxi",maxi)
                 best_box = sorted_data[ind][0]
             ind+=1
-        if best_box==-1:
+        if best_box==-1 and len(sorted_data)>1:
             best_box = sorted_data[0][0]
 
         return best_box
@@ -319,15 +470,18 @@ def perform_computation(data,truck_spec):
         depth_container = float(container.length)
         max_weight = container.max_weight
 
+        # print("UES",strip_list)
 
         init_x=x
         init_y=y
         init_z=z
 
-        total_strips = strip_list[box_num][4]
+        total_strips = deepcopy(df.at[box_num,'Rem_Strips'])
+        # print(total_strips)
         box_length = deepcopy(float(strip_list[box_num][0]))
         box_width = deepcopy(float(strip_list[box_num][1]))
         box_height = deepcopy(float(strip_list[box_num][2]))
+        box_weight = deepcopy(float(strip_list[box_num][9]))
 
         change_init = invertOrNot(x,end_x,box_num,box_length,box_width,box_height,width_container,total_strips)
         if change_init == True:
@@ -342,7 +496,7 @@ def perform_computation(data,truck_spec):
 
 
 
-        while total_strips > 0 and y > 0:
+        while total_strips > 0 and y > 0 and curr_weight+box_weight<max_weight:
             if x + box_width <= end_x and x + box_width <= width_container:  ## added the max weight check constraints
                 # print("prev_row",prev_row)
                 if len(prev_row) >1 and prev_row[len(prev_row)-2][1]>=0 and y-prev_row[len(prev_row)-2][1] > box_length and row== prev_row[len(prev_row)-2][6]:
@@ -354,13 +508,16 @@ def perform_computation(data,truck_spec):
                     # print("yes went inside")
                     # y = y-box_length
                     num_strips = strip_list[box_num][3]
-                    # print("UES")
-                    while num_strips > 0 and curr_weight < max_weight:
+                    storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+                    while num_strips > 0 and curr_weight+box_weight < max_weight:
                         ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                         z += box_height
                         num_strips -= 1
                         curr_weight+=strip_list[box_num][9]
                         vol_occ+=box_length*box_width*box_height
+                        # strip_storage.append[y,]
+                    
+                    
 
                     # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                     # x += box_width.
@@ -376,17 +533,22 @@ def perform_computation(data,truck_spec):
                         else:
                             continue
                         prev_row[len(prev_row)-1][1]=deepcopy(y)
-                        storage_strip[len(storage_strip)-1][1]=deepcopy(y)
+                        # storage_strip[len(storage_strip)-1][1]=deepcopy(y)
                         
 
                         num_strips = strip_list[box_num][3]
                         # print("UES")
-                        while num_strips > 0 and curr_weight < max_weight:
+                        storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
+                        while num_strips > 0 and curr_weight+box_weight < max_weight:
                             ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                             z += box_height
                             num_strips -= 1
                             curr_weight+=strip_list[box_num][9]
                             vol_occ+=box_length*box_width*box_height
+                       
+
+                        
                         x+=box_width
                         # print("Yes goes in",end_x)
                         # print("Y_before",y)
@@ -404,12 +566,16 @@ def perform_computation(data,truck_spec):
 
                 else:
                     num_strips = strip_list[box_num][3]
-                    while num_strips > 0 and curr_weight < max_weight:
+                    storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
+                    while num_strips > 0 and curr_weight+box_weight < max_weight:
                         ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                         z += box_height
                         num_strips -= 1
                         curr_weight+=strip_list[box_num][9]
                         vol_occ+=box_length*box_width*box_height
+                   
+                    
 
                     # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                     x += box_width
@@ -473,12 +639,17 @@ def perform_computation(data,truck_spec):
                         # vol_wasted += (x+box_width-end_x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
                         num_strips = strip_list[box_num][3]
                         # print("UES")
-                        while num_strips > 0 and curr_weight < max_weight:
+                        storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
+                        while num_strips > 0 and curr_weight+box_weight < max_weight:
                             ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                             z += box_height
                             num_strips -= 1
                             curr_weight+=strip_list[box_num][9]
                             vol_occ+=box_length*box_width*box_height
+                        
+
+                        
 
                         # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                         x += box_width
@@ -533,10 +704,10 @@ def perform_computation(data,truck_spec):
                 y_min = min(y_min,y)
 
                 prev_row.append([x,y])
-                storage_strip.append([x,y])
+                # storage_strip.append([x,y])
 
 
-        if y<0 and total_strips!=0:
+        if y<0 and total_strips!=0 and curr_weight+box_weight<max_weight:
             y+=box_length
             y-=box_width
             if y>0:
@@ -556,12 +727,16 @@ def perform_computation(data,truck_spec):
                             # y = y-box_length
                             num_strips = strip_list[box_num][3]
                             # print("UES")
-                            while num_strips > 0 and curr_weight < max_weight:
+                            
+                            storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+                            
+                            while num_strips > 0 and curr_weight+box_weight < max_weight:
                                 ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                 z += box_height
                                 num_strips -= 1
                                 curr_weight+=strip_list[box_num][9]
                                 vol_occ+=box_length*box_width*box_height
+        
 
                             # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                             # x += box_width.
@@ -577,18 +752,21 @@ def perform_computation(data,truck_spec):
                                 else:
                                     continue
                                 prev_row[len(prev_row)-1][1]=deepcopy(y)
-                                storage_strip[len(storage_strip)-1][1]=deepcopy(y)
+                                # storage_strip[len(storage_strip)-1][1]=deepcopy(y)
                                 
 
                                 num_strips = strip_list[box_num][3]
                                 # print("UES")
-                                while num_strips > 0 and curr_weight < max_weight:
+                                storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
+                                while num_strips > 0 and curr_weight+box_weight < max_weight:
                                     ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                     z += box_height
                                     num_strips -= 1
                                     curr_weight+=strip_list[box_num][9]
                                     vol_occ+=box_length*box_width*box_height
                                 x+=box_width
+
                                 # print("Yes goes in",end_x)
                                 # print("Y_before",y)
 
@@ -605,12 +783,15 @@ def perform_computation(data,truck_spec):
 
                         else:
                             num_strips = strip_list[box_num][3]
-                            while num_strips > 0 and curr_weight < max_weight:
+                            storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
+                            while num_strips > 0 and curr_weight+box_weight < max_weight:
                                 ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                 z += box_height
                                 num_strips -= 1
                                 curr_weight+=strip_list[box_num][9]
                                 vol_occ+=box_length*box_width*box_height
+                
 
                             # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                             x += box_width
@@ -674,12 +855,16 @@ def perform_computation(data,truck_spec):
                                 # vol_wasted += (x+box_width-end_x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
                                 num_strips = strip_list[box_num][3]
                                 # print("UES")
-                                while num_strips > 0 and curr_weight < max_weight:
+                                storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
+                                while num_strips > 0 and curr_weight+box_weight < max_weight:
                                     ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                     z += box_height
                                     num_strips -= 1
                                     curr_weight+=strip_list[box_num][9]
                                     vol_occ+=box_length*box_width*box_height
+                
+                                
 
                                 # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
                                 x += box_width
@@ -735,7 +920,7 @@ def perform_computation(data,truck_spec):
                         y_min = min(y_min,y)
 
                         prev_row.append([x,y])
-                        storage_strip.append([x,y])
+                        # storage_strip.append([x,y])
 
             
 
@@ -748,7 +933,7 @@ def perform_computation(data,truck_spec):
         df.at[box_num, 'Rem_Strips'] =total_strips
         df.at[box_num,'Marked'] = 0
         # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
-        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted
+        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip
 
 
 
@@ -756,11 +941,11 @@ def perform_computation(data,truck_spec):
     def create_plot(container):
         width_container = float(container.width)
         height_container = float(container.height)
-        depth_container = float(container.length)
+        length_container = float(container.length)
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         ax.set_xlim(0, width_container)
-        ax.set_ylim(0, depth_container)
+        ax.set_ylim(0, length_container)
         ax.set_zlim(0, height_container)
 
         # Set labels for axes
@@ -775,21 +960,25 @@ def perform_computation(data,truck_spec):
         return ax
 
 
-    def create_bottom_view(ax, vol_occ, vol_wasted):
+    def create_bottom_view(ax, vol_occ, vol_wasted,key,roll):
     # Adjust the viewing angle for bottom view
         ax.view_init(elev=90, azim=180)
+        key = key.replace("'", "")
+
 
         # Create text annotation including vol_occ and vol_wasted
-        text = f'vol_occ: {vol_occ:.2f}%\nvol_wasted: {vol_wasted:.2f}m^3'
+        text = f'vol_occ: {vol_occ:.2f}%\nvol_wasted: {vol_wasted:.2f}m^3\n{key}, roll: {roll}'
         ax.text2D(0.05, 0.95, text, transform=ax.transAxes, fontsize=12,
-                verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+              verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
         
         # Save the plot as an image with a fixed filename
-        filename = 'static/bottom_view.png'
+        # print("Yes_went_inside")/
+        filename = os.path.join('static', f"{key}_roll{roll}_bottom_view.png")
         plt.savefig(filename)
 
         # Close the plot to free up resources
         plt.close()
+        
 
         return filename  # Return the filename for reference
 
@@ -807,6 +996,7 @@ def perform_computation(data,truck_spec):
     prev_row_num=-1
     #Creating Plot
     ax = create_plot(container_toFit)
+    # print("before",df)
     x,z= 0,0
     colors= {0: 'red', 1: 'blue', 2: 'yellow', 3: 'orange', 4: 'green', 5: 'violet', 6: 'white', 7: 'indigo',8:'purple'}
     for i in range(len(strip_list)):
@@ -817,193 +1007,88 @@ def perform_computation(data,truck_spec):
             end_x = float(container_toFit.width)
     
         ans =choose_best_dimension(x,end_x,z,strip_list,container_toFit,stored_plac)
+        if ans==-1:
+            break
         strip_list[ans][7] = False
         if i == 0:
-            y=length_container-strip_list[ans][0]-1
+            y=container_toFit.length-strip_list[ans][0]-1
             y_min = min(y_min,y)
-        if y<=0:
+        if y<=0 or curr_weight+strip_list[ans][9]>container_toFit.max_weight:
             break
         if(i!=0 and row!=0):
             y = y-1+prev_row[len(prev_row)-1][4]-strip_list[ans][0]
             y_min = min(y_min,y)
 
             prev_row.append([x,y])
-            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
+            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
         else:
             if(i!=0 and row==0):
                 y = y-1+prev_row[len(prev_row)-1][4]-strip_list[ans][0]
             prev_row.append([x,y])
-            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
+            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
     if y_min <0:
         y_min = 0
     vol_occ_curr =round(vol_occ/(container_toFit.length*container_toFit.width*container_toFit.height),2)*100
     vol_wasted=round(vol_wasted*pow(10,-9),2)
-    filename_final = create_bottom_view(ax,vol_occ_curr,vol_wasted)
+    filename_final = create_bottom_view(ax,vol_occ_curr,vol_wasted,key,roll)
 
-
-    for i in range(len(df)):
-        if df.at[i,'Marked']==1:
-            df.at[i,'Rem_Strips'] = df.at[i,'TotalNumStrips']
-    # print(df)
-    df.drop(columns=['Marked'], inplace=True)
-    # print("y_min",y_min)
-    # print("Efficiency",round(area_covered/((container_toFit.length-y_min)*container_toFit.width),2))
-    # print("for homogenous end coordinates, ",x,y,z)
-    # print(strip_list)
     plt.close('all')
+    # print(storage_strip)
+    weight_sum_lower_half = 0
+    weight_sum_upper_half = 0
 
-    
+    # Calculate the threshold for comparison
+    threshold = container_toFit.length / 2
+
+    # Iterate through the storage_strip list and sum weights based on the condition
+    for item in storage_strip:
+        y, weight = item
+        # print(y)
+        if y < threshold:
+            weight_sum_lower_half += weight
+        else:
+            weight_sum_upper_half += weight
+
+    # Print the results
+    print("Sum of weights for y < container_length / 2:", weight_sum_lower_half)
+    print("Sum of weights for y > container_length / 2:", weight_sum_upper_half)
+
+    # Remove subarrays with negative first indexed elements
+    # strip_list_filtered = [sublist for sublist in strip_list if sublist[0] >= 0]
+
+    # # Sort the filtered strip list based on the 0th element in descending order
+    # strip_list_sorted = sorted(strip_list_filtered, key=lambda x: x[0], reverse=True)
+
+    # # Initialize a row number
+    # row_number = 0
+
+    # # Initialize the previous value for comparison
+    # prev_value = None
+
+    # # Iterate over the sorted strip list
+    # for sublist in strip_list_sorted:
+    #     # Check if the 0th element is different from the previous value
+    #     if sublist[0] != prev_value:
+    #         # If different, update the row number and previous value
+    #         row_number += 1
+    #         prev_value = sublist[0]
+    #     # Assign the row number to the sublist
+    #     sublist.append(row_number)
+
+    # # Print the modified strip list
+    # for sublist in strip_list_sorted:
+    #     sublist.pop()  # Remove the temporary row number added
+    #     print(sublist)
+
+
     return filename_final,df
 
 
-@app.route('/load_backend_function', methods=['POST'])
-def load_backend_function():
-    # Perform your backend function here
-    # For demonstration purposes, just printing a message
-    # print(1)
+def worker(df, container_toFit,strip_list,keys,roll):
+    length_container = container_toFit.length
+    width_container = container_toFit.width
+    height_container = container_toFit.height
     
-    # Return a response if needed
-    data, truck_spec = load_data_from_files()
-    selected_truck_spec = truck_specs.get(truck_spec, {})
-
-    # print(loaded_df)
-    # print(loaded_truck_specs)
-    length_container = selected_truck_spec['length_container']
-    width_container = selected_truck_spec['width_container']
-    height_container = selected_truck_spec['height_container']
-    max_weight= selected_truck_spec['max_weight']
-
-    col_list= data.columns.tolist()
-
-    gross_weight = data[col_list[0]].tolist()
-    net_weight = data[col_list[1]].tolist()
-    vol = data[col_list[2]].tolist()
-    height = data[col_list[6]].tolist()
-    numOfcases = data[col_list[7]].tolist()
-    rotation_allowed = data[col_list[8]].tolist()
-    temperature = data[col_list[3]].tolist()
-    length = data[col_list[4]].tolist()
-    width = data[col_list[5]].tolist()
-
-
-
-    
-    class Product:
-        def __init__(self, length, width, height,grossWeight,netWeight,temperature,volume,numberOfCases):
-            self.length = length
-            self.width = width
-            self.height = height
-            self.grossWeight = grossWeight
-            self.netWeight=netWeight
-            self.temperature=temperature
-            self.volume=volume
-            self.numberOfCases=numberOfCases
-
-
-
-    class Container:
-        def __init__(self, length, width, height, max_weight, front_axle_weight, rear_axle_weight, front_axle_distance, rear_axle_distance):
-            self.length = length
-            self.width = width
-            self.height = height
-            self.max_weight = max_weight
-            self.front_axle_weight = front_axle_weight
-            self.rear_axle_weight = rear_axle_weight
-            self.front_axle_distance = front_axle_distance
-            self.rear_axle_distance = rear_axle_distance
-
-    def create_strip_list(box, container):
-
-        box_len = float(box.length)
-        box_width = float(box.width)
-        box_height = float(box.height)
-
-        container_len = float(container.length)
-        container_width = float(container.width)
-        container_height = float(container.height)
-
-        if box_len < container_len and box_width < container_width:
-            num_of_boxes_fit = container_height//box_height
-            return [box_len,box_width,box_height,num_of_boxes_fit]
-
-        else:
-            return []
-
-
-
-    front_axle_weight = 16000
-    rear_axle_weight = 12400
-    front_axle_dist = 2890
-    rear_axle_dist = 3000
-
-
-
-    container_toFit = Container(length_container,width_container,height_container,max_weight,front_axle_weight,rear_axle_weight,front_axle_dist,rear_axle_dist)
-
-
-    num_typesOfBoxes = len(gross_weight)
-    # print(num_typesOfBoxes)
-    box_set = []
-
-    for i in range(num_typesOfBoxes):
-        box = Product(length[i],width[i],height[i],gross_weight[i],net_weight[i],temperature[i],vol[i],numOfcases[i])
-        box_set.append(box)
-                                    
-    strip_list =[]
-    for box in box_set:
-        strips= create_strip_list(box,container_toFit)
-        strip_list.append(strips)
-
-
-
-    def remBoxes(box_set,strip_list):
-        rem_boxes = []
-        num_of_strips_per_boxType=[]
-        i=0
-        for box in box_set:
-            num = int(box.numberOfCases)
-            # print(i)
-            num_per_strip = strip_list[i][3]
-            num_of_strips= num//num_per_strip
-            rem = num%num_per_strip
-            num_of_strips_per_boxType.append(num_of_strips)
-            rem_boxes.append(rem)
-            i+=1
-        return rem_boxes, num_of_strips_per_boxType
-
-    rem_boxes, num_strips_box = remBoxes(box_set,strip_list)
-
-    for i in range(len(strip_list)):
-        strip_list[i].append(num_strips_box[i])
-        strip_list[i].append(rem_boxes[i])
-        strip_list[i].append(int(box_set[i].numberOfCases))  # Indicating that it has been used
-        strip_list[i].append(True)
-        strip_list[i].append(rotation_allowed[i])
-        strip_list[i].append(float(box_set[i].grossWeight))
-
-    # print(strip_list)
-
-    for i in range(len(strip_list)):
-        for j in range(len(strip_list[i])):
-            strip_list[i][j] = float(strip_list[i][j])
-    # strip_list
-    df = pd.DataFrame(strip_list)
-    df.columns= ['Length','Width','Height','NumOfBoxesPerStrip','TotalNumStrips','Rem_Boxes','TotalCases','Marked', 'Alpha(rotation about Z-axis)','GrossWeight']
-    # Drop the 'Marked' column
-
-    # Add 'BoxNumber' column
-    df['BoxNumber'] = df.index
-
-    # Define color dictionary
-    colors = {0: 'red', 1: 'blue', 2: 'yellow', 3: 'orange', 4: 'green', 5: 'violet', 6: 'white', 7: 'indigo', 8: 'purple'}
-
-    # Add 'Color' column
-    df['Color'] = df['BoxNumber'].map(colors)
-    df = df[['BoxNumber', 'Color'] + [col for col in df.columns if col not in ['BoxNumber', 'Color']]]
-    df['Rem_Strips'] = 0
-    # print(df)
-
-
     def widthRem(width_rem,strip_list):
         for box in strip_list:
 
@@ -1131,10 +1216,11 @@ def load_backend_function():
         init_y=y
         init_z=z
 
-        total_strips = strip_list[box_num][4]
+        total_strips = deepcopy(df.at[box_num,'Rem_Strips'])
         box_length = deepcopy(float(strip_list[box_num][0]))
         box_width = deepcopy(float(strip_list[box_num][1]))
         box_height = deepcopy(float(strip_list[box_num][2]))
+        box_weight = deepcopy(float(strip_list[box_num][9]))
 
         change_init = invertOrNot(x,end_x,box_num,box_length,box_width,box_height,width_container,total_strips)
         if change_init == True:
@@ -1149,7 +1235,7 @@ def load_backend_function():
 
 
 
-        while total_strips > 0 and y > 0:
+        while total_strips > 0 and y > 0 and curr_weight+box_weight<max_weight:
             if x + box_width <= end_x and x + box_width <= width_container:  ## added the max weight check constraints
                 # print("prev_row",prev_row)
                 if len(prev_row) >1 and prev_row[len(prev_row)-2][1]>=0 and y-prev_row[len(prev_row)-2][1] > box_length and row== prev_row[len(prev_row)-2][6]:
@@ -1162,7 +1248,7 @@ def load_backend_function():
                     # y = y-box_length
                     num_strips = strip_list[box_num][3]
                     # print("UES")
-                    while num_strips > 0 and curr_weight < max_weight:
+                    while num_strips > 0 and curr_weight+box_weight < max_weight:
                         ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                         z += box_height
                         num_strips -= 1
@@ -1188,7 +1274,7 @@ def load_backend_function():
 
                         num_strips = strip_list[box_num][3]
                         # print("UES")
-                        while num_strips > 0 and curr_weight < max_weight:
+                        while num_strips > 0 and curr_weight+box_weight < max_weight:
                             ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                             z += box_height
                             num_strips -= 1
@@ -1211,7 +1297,7 @@ def load_backend_function():
 
                 else:
                     num_strips = strip_list[box_num][3]
-                    while num_strips > 0 and curr_weight < max_weight:
+                    while num_strips > 0 and curr_weight+box_weight < max_weight:
                         ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                         z += box_height
                         num_strips -= 1
@@ -1280,7 +1366,7 @@ def load_backend_function():
                         # vol_wasted += (x+box_width-end_x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
                         num_strips = strip_list[box_num][3]
                         # print("UES")
-                        while num_strips > 0 and curr_weight < max_weight:
+                        while num_strips > 0 and curr_weight+box_weight < max_weight:
                             ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                             z += box_height
                             num_strips -= 1
@@ -1344,14 +1430,14 @@ def load_backend_function():
                 storage_strip.append([x,y])
 
 
-        if y<0 and total_strips!=0:
+        if y<0 and total_strips!=0 and curr_weight+box_weight<max_weight:
             y+=box_length
             y-=box_width
             if y>0:
                 temp = deepcopy(box_length)
                 box_length = deepcopy(box_width)
                 box_width = deepcopy(temp)
-                while total_strips > 0 and y > 0:
+                while total_strips > 0 and y > 0 and curr_weight+box_weight<max_weight:
                     if x + box_width <= end_x and x + box_width <= width_container:  ## added the max weight check constraints
                         # print("prev_row",prev_row)
                         if len(prev_row) >1 and prev_row[len(prev_row)-2][1]>=0 and y-prev_row[len(prev_row)-2][1] > box_length and row== prev_row[len(prev_row)-2][6]:
@@ -1364,7 +1450,7 @@ def load_backend_function():
                             # y = y-box_length
                             num_strips = strip_list[box_num][3]
                             # print("UES")
-                            while num_strips > 0 and curr_weight < max_weight:
+                            while num_strips > 0 and curr_weight+box_weight < max_weight:
                                 ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                 z += box_height
                                 num_strips -= 1
@@ -1390,7 +1476,7 @@ def load_backend_function():
 
                                 num_strips = strip_list[box_num][3]
                                 # print("UES")
-                                while num_strips > 0 and curr_weight < max_weight:
+                                while num_strips > 0 and curr_weight+box_weight < max_weight:
                                     ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                     z += box_height
                                     num_strips -= 1
@@ -1413,7 +1499,7 @@ def load_backend_function():
 
                         else:
                             num_strips = strip_list[box_num][3]
-                            while num_strips > 0 and curr_weight < max_weight:
+                            while num_strips > 0 and curr_weight+box_weight < max_weight:
                                 ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                 z += box_height
                                 num_strips -= 1
@@ -1482,7 +1568,7 @@ def load_backend_function():
                                 # vol_wasted += (x+box_width-end_x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
                                 num_strips = strip_list[box_num][3]
                                 # print("UES")
-                                while num_strips > 0 and curr_weight < max_weight:
+                                while num_strips > 0 and curr_weight+box_weight < max_weight:
                                     ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                     z += box_height
                                     num_strips -= 1
@@ -1556,30 +1642,35 @@ def load_backend_function():
         prev_row[len(prev_row)-1].append(1)
         prev_row[len(prev_row)-1].append(row)
         y_min = min(y_min,y)
+        df.at[box_num, 'Rem_Strips'] =total_strips
+        df.at[box_num,'Marked'] = 0
         
         # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
         return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,total_strips,vol_wasted
 
 
 
-    def create_bottom_view(ax, iteration, vol_occ_curr, vol_wasted):
+    def create_bottom_view(ax, iteration, vol_occ_curr, vol_wasted, keys, roll):
     # Adjust the viewing angle for bottom view
         ax.view_init(elev=90, azim=180)
+        keys=keys.replace("'","")
         
         # Create text annotation including iteration number, vol_occ_curr, and vol_wasted
-        text = f'Iteration: {iteration}\nvol_occ_curr: {vol_occ_curr:.2f}%\nvol_wasted: {vol_wasted:.2f}m^3'
+        text = f'Iteration: {iteration}\nvol_occ_curr: {vol_occ_curr:.2f}%\nvol_wasted: {vol_wasted:.2f}m^3\nKeys: {keys}\nRoll: {roll}'
         
         ax.text2D(0.05, 0.95, text, transform=ax.transAxes, fontsize=12,
                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
         
-        # Save the plot as an image with a filename including the iteration number
-        filename = f'static/bottom_view_iteration_{iteration}.png'
+        # Construct the filename including the iteration number, keys, and roll
+        # filename = f'bottom_view_iteration_{iteration}_keys_{keys}_roll_{roll}.png'
+        filename = os.path.join('static', f"bottom_view_iteration_{iteration}_keys_{keys}_roll_{roll}.png")
         plt.savefig(filename)
         
         # Close the plot to free up resources
         plt.close()
 
-        return filename  # Return the filename for reference
+        return filename
+    # Return the filename for reference
 
 
     def generate_colors(n):
@@ -1611,6 +1702,7 @@ def load_backend_function():
     efficiency = []
     df_stored=[]
     all_y_min=[]
+    file_storer =[]
     vol_eff =[]
     wasted_vol = []
     
@@ -1678,30 +1770,31 @@ def load_backend_function():
                 y_min = min(y_min,y)
                 prev_row.append([x,y])
                 storage_strip.append([x,y])
-                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,total_strips,vol_wasted= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
+                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,tmp,total_strips,vol_wasted= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,tmp,vol_wasted)
             else:
                 if(j!=0 and row==0):
                     y = y-1+prev_row[len(prev_row)-1][4]-strip_list[perms[i][j]][0]
                 y_min = min(y_min,y)
                 prev_row.append([x,y])
                 storage_strip.append([x,y])
-                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,total_strips,vol_wasted= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
+                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,tmp,total_strips,vol_wasted= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,tmp,vol_wasted)
             
             tmp.at[perms[i][j], 'Rem_Strips'] =total_strips
             tmp.at[perms[i][j],'Marked'] = 0
         
-        for m in range(len(df)):
-            if tmp.at[m,'Marked']==1:
-                tmp.at[m,'Rem_Strips'] = tmp.at[m,'TotalNumStrips']
+        # for m in range(len(df)):
+        #     if tmp.at[m,'Marked']==1:
+        #         tmp.at[m,'Rem_Strips'] = tmp.at[m,'TotalNumStrips']
         
-        tmp.drop(columns=['Marked'], inplace=True)
-        tmp =tmp.to_html()
+        # tmp.drop(columns=['Marked'], inplace=True)
+        # tmp =tmp.to_html()
         df_stored.append(tmp)
  
         if y_min <0:
             y_min = 0        
         vol_occ_curr =round(vol_occ/(container_toFit.length*container_toFit.width*container_toFit.height),2)*100
-        create_bottom_view(ax, i,vol_occ_curr,round(vol_wasted*pow(10,-9),2))
+        filename = create_bottom_view(ax, i,vol_occ_curr,round(vol_wasted*pow(10,-9),2),keys,roll)
+        file_storer.append(filename)
         wasted_vol.append(round(vol_wasted*pow(10,-9),2))
         all_y_min.append(y_min)
         vol_eff.append(vol_occ_curr)
@@ -1723,19 +1816,66 @@ def load_backend_function():
 
     # df_html = df.to_html()  
     final = df_stored[max_index3]
+    filename = file_storer[max_index3]
+
+
+    return filename,final
+
+    
+
+@app.route('/load_backend_function', methods=['POST'])
+def load_backend_function():
+    # Perform your backend function here
+    # For demonstration purposes, just printing a message
+    # print(1)
+    df_storer=[]
+    img_paths=[]
+    outer_index= 0
+    
+    # Return a response if needed
+    df, container_data = load_data_from_files()
+    for keys, values in container_data.items():
+        selected_truck_spec = truck_specs.get(keys, {})
+        # print("selected_truck_specs",selected_truck_spec)
+        if outer_index==0:
+            df,container_toFit,strip_list= dataProcess_1(df,selected_truck_spec)
+        if outer_index!=0:
+            # print("df_prev",df)
+            df,container_toFit,strip_list = dataProcess_2(df,selected_truck_spec)
+            # print("df_after",df)
+
+        roll = values
+        index_= 0
+        while roll>0:
+            filename,df= worker(df,container_toFit,strip_list,keys,index_)
+            temp= deepcopy(df)
+            df_storer.append(temp.to_html(classes='data')) 
+            index_+=1
+            roll-=1
+            filename = filename.replace('\\', '/')
+            img_paths.append(filename)
+
+        outer_index+=1
+    # selected_truck_spec = truck_specs.get(truck_spec, {})
+
+    print(img_paths)
 
     response = {
     'show_optimal_solution': True,  # Set this to True if you want to display the optimal solution
-    'df_html': final,  # DataFrame converted to HTML format
-    'iteration_number': iteration_number
+    'df_html_array': df_storer,  # DataFrame converted to HTML format
+    'image_Array': img_paths
     }
-    print("Memory usage at end:", memory_usage(), "MB")
+    # print("Memory usage at end:", memory_usage(), "MB")
 
-    # Print maximum memory usage
-    print("Max memory usage:", max_memory_usage, "MB")
+    # # Print maximum memory usage
+    # print("Max memory usage:", max_memory_usage, "MB")
+    # print(response)s
 
     
     return jsonify(response)
+
+    
+
 
 
 def save_data_to_files(df, truck_specifications):
@@ -1756,26 +1896,74 @@ def load_data_from_files():
 
     return df, truck_specs
 
+
 @app.route('/upload', methods=['POST'])
 def upload():
     if 'file' not in request.files:
         return 'No file part'
     
-    truck_specification = request.form['truckSpec']
+    # truck_specification = request.form['truckSpec']
     file = request.files['file']
 
     
     if file.filename == '':
         return 'No selected file'
-    
-    selected_truck_spec = truck_specs.get(truck_specification, {})
-    df = pd.read_excel(file)
-    save_data_to_files(df, truck_specification)
-  
-    result,df= perform_computation(df,selected_truck_spec)
-    # print(df)
+    total_containers = int(request.form['totalContainers'])
 
-    return render_template('output.html', table=df.to_html(classes='data'))
+    # Retrieve the type and count of each container
+    container_data = {}
+    for i in range(1, total_containers + 1):
+        container_type = request.form['containerType{}'.format(i)]
+        container_count = int(request.form['containerCount{}'.format(i)])
+        container_data[container_type] = container_count
+
+    # print(container_data)
+
+    
+    df = pd.read_excel(file)
+    save_data_to_files(df, container_data)
+    # df,container_toFit,strip_list= dataProcess_1(df,selected_truck_spec)
+
+    # print(df)
+    df_storer=[]
+    img_paths=[]
+    outer_index= 0
+ 
+    # for keys, values in container_data.items():
+    #     roll = values
+    #     index_= 0
+    #     while roll>0:
+    #         filename,df= perform_computation(df,container_toFit,strip_list,keys,index_)
+    #         df_storer.append(df.to_html(classes='data')) 
+    #         index_+=1
+    #         roll-=1
+    #         img_paths.append(filename)
+
+    for keys, values in container_data.items():
+        selected_truck_spec = truck_specs.get(keys, {})
+        # print("selected_truck_specs",selected_truck_spec)
+        if outer_index==0:
+            df,container_toFit,strip_list= dataProcess_1(df,selected_truck_spec)
+        if outer_index!=0:
+            # print("df_prev",df)
+            df,container_toFit,strip_list = dataProcess_2(df,selected_truck_spec)
+            # print("df_after",df)
+
+        roll = values
+        index_= 0
+        while roll>0:
+            filename,df= perform_computation(df,container_toFit,strip_list,keys,index_)
+            df_storer.append(df.to_html(classes='data')) 
+            index_+=1
+            roll-=1
+            img_paths.append(filename)
+
+        outer_index+=1
+
+        print(img_paths)
+    
+
+    return render_template('output.html', tables=df_storer,img_paths = img_paths)
 
 if __name__ == '__main__':
     app.run(debug=True)
