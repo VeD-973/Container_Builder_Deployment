@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, jsonify
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg') 
-import matplotlib.pyplot as plt
 import pandas as pd
 import json
 from copy import deepcopy
@@ -1129,6 +1128,7 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
     n = len(strip_list)
     # print(generate_colors(n))
     colors = generate_colors(n)
+    # print(colors)
 
     # print(strip_list)
     stored_plac = []
@@ -1145,7 +1145,7 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
     prev_row_num=-1
     #Creating Plot
     ax = create_plot(container_toFit)
-    x,z= 0,0
+    x,y,z= 0,0,0
     
     for i in range(len(strip_list)):
         # if i==3:
@@ -1175,12 +1175,12 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
             x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
     
 
-    # #Non homo placement
-    # nH_list =  []
+    #Non homo placement
+    nH_list =  []
 
-    # for i in range(len(df)):
-    #     nH_list.append([df.at[i,'Length'],df.at[i,'Width'],df.at[i,'Height'],df.at[i,'Rem_Boxes'],df.at[i,'GrossWeight']])
-    # x,y,z,vol_occ,y_min,df,vol_wasted,storage_strip = place_nonH(x,y,z,colors,nH_list,container_toFit,ax,curr_weight,stored_plac,vol_occ,y_min,df,vol_wasted)
+    for i in range(len(df)):
+        nH_list.append([df.at[i,'Length'],df.at[i,'Width'],df.at[i,'Height'],df.at[i,'Rem_Boxes'],i,df.at[i,'GrossWeight']])
+    x,y,z,vol_occ,y_min,df,vol_wasted,storage_strip = place_nonH(x,y,z,colors,nH_list,container_toFit,ax,curr_weight,stored_plac,vol_occ,y_min,df,vol_wasted)
 
 
     if y_min <0:
@@ -1195,7 +1195,7 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
     best_width_order = widthOrder(strip_list)
     stability_fin = stability(weight_leftHalf,weight_rightHalf,best_width_order,curr_width_order,vol_wasted,vol_occ_curr)
     filename_final = create_bottom_view(ax,vol_occ_curr,vol_wasted,key,roll,stability_fin)
-    plt.close('all')
+    # plt.close('all')
     # print(df)
     
     return filename_final,df
@@ -1749,6 +1749,74 @@ def worker(df, container_toFit,strip_list,keys,roll):
         # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
         return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,total_strips,vol_wasted,storage_strip
     
+    def place_nonH(x,y,z,colors,nH_list,container,ax,curr_weight,stored_plac,vol_occ,y_min,df,vol_wasted): # Used for placing the non homogenous boxes
+        width_container = float(container.width)
+        height_container = float(container.height)
+        depth_container = float(container.length)
+        max_weight = float(container.max_weight)
+
+
+        init_x=x
+        init_y=y
+        init_z=z
+
+        total_boxes= 0
+        max_len = 0
+        max_width= 0
+
+        for num in nH_list:
+            total_boxes+= num[3]
+            max_len = max(max_len,num[0])
+            max_width = max(max_width,num[1])
+
+        index = 0
+        while total_boxes>0 and y > 0:
+
+            while z<height_container and index < len(nH_list):
+                rem_boxes = nH_list[index][3]
+                box_num = nH_list[index][4]
+                box_length = nH_list[index][0]
+                box_width = nH_list[index][1]
+                box_height = nH_list[index][2]
+
+                temp = rem_boxes
+                dw = False
+                while temp>0 and z<height_container:
+                    if(x+box_width < width_container and curr_weight < max_weight and z+box_height < height_container):
+                        ax.bar3d(x, y, z, box_width, box_length, box_height, color=colors[box_num], edgecolor='black')
+                        z += box_height
+                        temp -= 1
+                        curr_weight+=nH_list[index][5]
+                    else:
+                        dw = True
+                        break
+                nH_list[index][3] -= rem_boxes-temp
+                total_boxes-=(rem_boxes-temp)
+                if(dw==False and nH_list[index][3]==0):
+                    index+=1
+                if dw == True and nH_list[index][3]!=0:
+                    x = x+max_width
+                    z=0
+
+
+                if(x+max_width > width_container):
+                    x=0
+                    y = y-max_len
+                    z=0
+                # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num])
+
+            if z >height_container:
+                if(x+max_width> width_container):
+                    x=0
+                    y = y-max_len
+                    z=0
+                else:
+                    x= x+ max_width
+                    z = 0
+
+        # plt.show()
+
+        return  x,y,z,vol_occ,y_min,df,vol_wasted,storage_strip
 
     def stability(weight_leftHalf, weight_rightHalf,best_widht_order,curr_width_order,vol_wasted,vol_occupied):
     # Finding the percentage difference betweeenn the load on the front and rear axel from the centre line 
@@ -1957,6 +2025,11 @@ def worker(df, container_toFit,strip_list,keys,roll):
         # tmp.drop(columns=['Marked'], inplace=True)
         # tmp =tmp.to_html()
         df_stored.append(tmp)
+        nH_list =  []
+
+        for m in range(len(tmp)):
+            nH_list.append([tmp.at[m,'Length'],tmp.at[m,'Width'],tmp.at[m,'Height'],tmp.at[m,'Rem_Boxes'],m,tmp.at[m,'GrossWeight']])
+        x,y,z,vol_occ,y_min,tmp,vol_wasted,storage_strip = place_nonH(x,y,z,colors,nH_list,container_toFit,ax,curr_weight,stored_plac,vol_occ,y_min,tmp,vol_wasted)
  
         if y_min <0:
             y_min = 0        
@@ -1967,9 +2040,11 @@ def worker(df, container_toFit,strip_list,keys,roll):
         weight_leftHalf, weight_rightHalf = weight_distribution(container_toFit,storage_strip)
         stability_fin = stability(weight_leftHalf,weight_rightHalf,best_width_order,curr_order,round(vol_wasted*pow(10,-9),2),round(vol_occ/(container_toFit.length*container_toFit.width*container_toFit.height),2)*100)
         # print(stability_fin)
+        # print("min_stab",min_stab)
         if min_stab>stability_fin:
             min_stab = stability_fin
-            max_index3 = i
+            max_index3 = deepcopy(i)
+        # print(i)
         filename = create_bottom_view(ax, i,vol_occ_curr,round(vol_wasted*pow(10,-9),2),keys,roll,stability_fin)
         file_storer.append(filename)
         all_y_min.append(y_min)
@@ -1979,10 +2054,13 @@ def worker(df, container_toFit,strip_list,keys,roll):
     
 
 
-
+    # print(max_index3)
     # df_html = df.to_html()  
     final = df_stored[max_index3]
     filename = file_storer[max_index3]
+
+    # print("file_name",filename)
+    # print("Final",final)
 
 
     return filename,final
