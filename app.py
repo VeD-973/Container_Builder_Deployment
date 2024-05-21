@@ -934,9 +934,105 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
         df.at[box_num,'Marked'] = 0
         # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
         return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip
+    
+    def place_nonH(x,y,z,colors,nH_list,container,ax,curr_weight,stored_plac,vol_occ,y_min,df,vol_wasted): # Used for placing the non homogenous boxes
+        width_container = float(container.width)
+        height_container = float(container.height)
+        depth_container = float(container.length)
+        max_weight = float(container.max_weight)
 
 
+        init_x=x
+        init_y=y
+        init_z=z
 
+        total_boxes= 0
+        max_len = 0
+        max_width= 0
+
+        for num in nH_list:
+            total_boxes+= num[3]
+            max_len = max(max_len,num[0])
+            max_width = max(max_width,num[1])
+
+        index = 0
+        while total_boxes>0 and y > 0:
+
+            while z<height_container and index < len(nH_list):
+                rem_boxes = nH_list[index][3]
+                box_num = nH_list[index][4]
+                box_length = nH_list[index][0]
+                box_width = nH_list[index][1]
+                box_height = nH_list[index][2]
+
+                temp = rem_boxes
+                dw = False
+                while temp>0 and z<height_container:
+                    if(x+box_width < width_container and curr_weight < max_weight and z+box_height < height_container):
+                        ax.bar3d(x, y, z, box_width, box_length, box_height, color=colors[box_num], edgecolor='black')
+                        z += box_height
+                        temp -= 1
+                        curr_weight+=nH_list[index][5]
+                    else:
+                        dw = True
+                        break
+                nH_list[index][3] -= rem_boxes-temp
+                total_boxes-=(rem_boxes-temp)
+                if(dw==False and nH_list[index][3]==0):
+                    index+=1
+                if dw == True and nH_list[index][3]!=0:
+                    x = x+max_width
+                    z=0
+
+
+                if(x+max_width > width_container):
+                    x=0
+                    y = y-max_len
+                    z=0
+                # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num])
+
+            if z >height_container:
+                if(x+max_width> width_container):
+                    x=0
+                    y = y-max_len
+                    z=0
+                else:
+                    x= x+ max_width
+                    z = 0
+
+        # plt.show()
+
+        return  x,y,z,vol_occ,y_min,df,vol_wasted,storage_strip
+
+
+    def stability(weight_leftHalf, weight_rightHalf,best_widht_order,curr_width_order,vol_wasted,vol_occupied):
+        # Finding the percentage difference betweeenn the load on the front and rear axel from the centre line 
+        front_axel_perc = weight_leftHalf/(weight_rightHalf+weight_leftHalf+0.01)
+        penalty_weight = 0
+        penalty_width_order = 0
+        if front_axel_perc>0.6 :
+            penalty_weight = abs(front_axel_perc-0.6)*10
+        elif front_axel_perc<0.5:
+            penalty_weight = abs(front_axel_perc-0.5)*10
+
+        for i in range(len(curr_width_order)):
+            if best_widht_order[i]==curr_width_order[i]:
+                penalty_width_order+=1
+            else:
+                penalty_width_order-=1
+
+        # print(best_widht_order)
+        # print(curr_width_order)
+        # print("Vol_was", 0.8*vol_wasted)
+        # print("Vol_occ",0.1*vol_occupied)
+        # print("width_order", 0.05*penalty_width_order)
+        # print("weight_pen", 0.05*penalty_weight)
+
+        
+        stab = round(0.8*vol_wasted-( 0.1*vol_occupied/100)-0.05*penalty_width_order-0.05*penalty_weight,2)
+
+        return stab
+ 
 
     def create_plot(container):
         width_container = float(container.width)
@@ -959,33 +1055,86 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
         plt.ioff()
         return ax
 
+    def weight_distribution(container_toFit,storage_strip):
+        weight_sum_lower_half = 0
+        weight_sum_upper_half = 0
 
-    def create_bottom_view(ax, vol_occ, vol_wasted,key,roll):
+        # Calculate the threshold for comparison
+        threshold = container_toFit.length / 2
+
+        # Iterate through the storage_strip list and sum weights based on the condition
+        for item in storage_strip:
+            y, weight = item
+            if y < threshold:
+                weight_sum_lower_half += weight
+            else:
+                weight_sum_upper_half += weight
+
+        # Print the results
+        # print("Sum of weights for y < container_length / 2:", weight_sum_lower_half)
+        # print("Sum of weights for y > container_length / 2:", weight_sum_upper_half)
+
+        return weight_sum_lower_half,weight_sum_upper_half
+
+
+
+    def create_bottom_view(ax, vol_occ, vol_wasted, key, roll, stability_fin):
     # Adjust the viewing angle for bottom view
         ax.view_init(elev=90, azim=180)
         key = key.replace("'", "")
 
-
         # Create text annotation including vol_occ and vol_wasted
-        text = f'vol_occ: {vol_occ:.2f}%\nvol_wasted: {vol_wasted:.2f}m^3\n{key}, roll: {roll}'
-        ax.text2D(0.05, 0.95, text, transform=ax.transAxes, fontsize=12,
-              verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+        text_top = f'vol_occ: {vol_occ:.2f}%\nvol_wasted: {vol_wasted:.2f}m^3\n{key}, roll: {roll}'
+        ax.text2D(0.05, 0.95, text_top, transform=ax.transAxes, fontsize=12,
+                verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+        
+        # Create text annotation for stability_fin at the bottom
+        text_bottom = f'stability_fin: {stability_fin}'
+        ax.text2D(0.05, 0.05, text_bottom, transform=ax.transAxes, fontsize=12,
+                verticalalignment='bottom', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
         
         # Save the plot as an image with a fixed filename
-        # print("Yes_went_inside")/
         filename = os.path.join('static', f"{key}_roll{roll}_bottom_view.png")
         plt.savefig(filename)
 
         # Close the plot to free up resources
         plt.close()
-        
 
         return filename  # Return the filename for reference
+
+    def widthOrder(strip_list):
+        temp = []
+        for details in strip_list:
+            temp.append(details[1])
+        temp.sort(reverse=True)
+
+        return temp
+
+
+
+
+
+    def generate_colors(n):
+        distinct_colors = ['red', 'blue', 'yellow', 'orange', 'green', 'violet', 'white', 'indigo', 'cyan', 'magenta', 'lime', 'pink', 'teal', 'lavender', 'brown', 'gray', 'black']
+
+        if n <= len(distinct_colors):
+            return {i: distinct_colors[i] for i in range(n)}
+        else:
+            new_colors = {}
+            for i in range(n):
+                new_colors[i] = distinct_colors[i % len(distinct_colors)]
+            return new_colors
+
+    # Example usage:
+    n = len(strip_list)
+    # print(generate_colors(n))
+    colors = generate_colors(n)
 
     # print(strip_list)
     stored_plac = []
     storage_strip=[]
     prev_row= []
+    curr_width_order = []
     end_x = float(container_toFit.width)
     curr_weight = 0
     prev_y =-1
@@ -996,19 +1145,18 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
     prev_row_num=-1
     #Creating Plot
     ax = create_plot(container_toFit)
-    # print("before",df)
     x,z= 0,0
-    colors= {0: 'red', 1: 'blue', 2: 'yellow', 3: 'orange', 4: 'green', 5: 'violet', 6: 'white', 7: 'indigo',8:'purple'}
+    
     for i in range(len(strip_list)):
         # if i==3:
-        #     break
-        placed= []
+        # break
         if len(prev_row)==0 or len(prev_row)==1:
             end_x = float(container_toFit.width)
     
         ans =choose_best_dimension(x,end_x,z,strip_list,container_toFit,stored_plac)
         if ans==-1:
             break
+        curr_width_order.append(strip_list[ans][1])
         strip_list[ans][7] = False
         if i == 0:
             y=container_toFit.length-strip_list[ans][0]-1
@@ -1018,7 +1166,6 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
         if(i!=0 and row!=0):
             y = y-1+prev_row[len(prev_row)-1][4]-strip_list[ans][0]
             y_min = min(y_min,y)
-
             prev_row.append([x,y])
             x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
         else:
@@ -1026,61 +1173,31 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
                 y = y-1+prev_row[len(prev_row)-1][4]-strip_list[ans][0]
             prev_row.append([x,y])
             x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
+    
+
+    # #Non homo placement
+    # nH_list =  []
+
+    # for i in range(len(df)):
+    #     nH_list.append([df.at[i,'Length'],df.at[i,'Width'],df.at[i,'Height'],df.at[i,'Rem_Boxes'],df.at[i,'GrossWeight']])
+    # x,y,z,vol_occ,y_min,df,vol_wasted,storage_strip = place_nonH(x,y,z,colors,nH_list,container_toFit,ax,curr_weight,stored_plac,vol_occ,y_min,df,vol_wasted)
+
+
     if y_min <0:
         y_min = 0
     vol_occ_curr =round(vol_occ/(container_toFit.length*container_toFit.width*container_toFit.height),2)*100
     vol_wasted=round(vol_wasted*pow(10,-9),2)
-    filename_final = create_bottom_view(ax,vol_occ_curr,vol_wasted,key,roll)
+    
 
-    plt.close('all')
+
     # print(storage_strip)
-    weight_sum_lower_half = 0
-    weight_sum_upper_half = 0
-
-    # Calculate the threshold for comparison
-    threshold = container_toFit.length / 2
-
-    # Iterate through the storage_strip list and sum weights based on the condition
-    for item in storage_strip:
-        y, weight = item
-        # print(y)
-        if y < threshold:
-            weight_sum_lower_half += weight
-        else:
-            weight_sum_upper_half += weight
-
-    # Print the results
-    print("Sum of weights for y < container_length / 2:", weight_sum_lower_half)
-    print("Sum of weights for y > container_length / 2:", weight_sum_upper_half)
-
-    # Remove subarrays with negative first indexed elements
-    # strip_list_filtered = [sublist for sublist in strip_list if sublist[0] >= 0]
-
-    # # Sort the filtered strip list based on the 0th element in descending order
-    # strip_list_sorted = sorted(strip_list_filtered, key=lambda x: x[0], reverse=True)
-
-    # # Initialize a row number
-    # row_number = 0
-
-    # # Initialize the previous value for comparison
-    # prev_value = None
-
-    # # Iterate over the sorted strip list
-    # for sublist in strip_list_sorted:
-    #     # Check if the 0th element is different from the previous value
-    #     if sublist[0] != prev_value:
-    #         # If different, update the row number and previous value
-    #         row_number += 1
-    #         prev_value = sublist[0]
-    #     # Assign the row number to the sublist
-    #     sublist.append(row_number)
-
-    # # Print the modified strip list
-    # for sublist in strip_list_sorted:
-    #     sublist.pop()  # Remove the temporary row number added
-    #     print(sublist)
-
-
+    weight_leftHalf, weight_rightHalf = weight_distribution(container_toFit,storage_strip)
+    best_width_order = widthOrder(strip_list)
+    stability_fin = stability(weight_leftHalf,weight_rightHalf,best_width_order,curr_width_order,vol_wasted,vol_occ_curr)
+    filename_final = create_bottom_view(ax,vol_occ_curr,vol_wasted,key,roll,stability_fin)
+    plt.close('all')
+    # print(df)
+    
     return filename_final,df
 
 
@@ -1239,15 +1356,10 @@ def worker(df, container_toFit,strip_list,keys,roll):
             if x + box_width <= end_x and x + box_width <= width_container:  ## added the max weight check constraints
                 # print("prev_row",prev_row)
                 if len(prev_row) >1 and prev_row[len(prev_row)-2][1]>=0 and y-prev_row[len(prev_row)-2][1] > box_length and row== prev_row[len(prev_row)-2][6]:
-                    # x-= box_width
                     
-                    # print("x",x)
-                    # print("y",y)
-
-                    # print("yes went inside")
-                    # y = y-box_length
                     num_strips = strip_list[box_num][3]
                     # print("UES")
+                    storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
                     while num_strips > 0 and curr_weight+box_weight < max_weight:
                         ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                         z += box_height
@@ -1255,8 +1367,7 @@ def worker(df, container_toFit,strip_list,keys,roll):
                         curr_weight+=strip_list[box_num][9]
                         vol_occ+=box_length*box_width*box_height
 
-                    # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
-                    # x += box_width.
+                    
                     z = 0
                     total_strips -= 1
                     # prev_row[len(prev_row)-1][2]=deepcopy(x)
@@ -1269,11 +1380,13 @@ def worker(df, container_toFit,strip_list,keys,roll):
                         else:
                             continue
                         prev_row[len(prev_row)-1][1]=deepcopy(y)
-                        storage_strip[len(storage_strip)-1][1]=deepcopy(y)
+                        # storage_strip[len(storage_strip)-1][1]=deepcopy(y)
                         
 
                         num_strips = strip_list[box_num][3]
                         # print("UES")
+                        storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
                         while num_strips > 0 and curr_weight+box_weight < max_weight:
                             ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                             z += box_height
@@ -1281,22 +1394,22 @@ def worker(df, container_toFit,strip_list,keys,roll):
                             curr_weight+=strip_list[box_num][9]
                             vol_occ+=box_length*box_width*box_height
                         x+=box_width
-                        # print("Yes goes in",end_x)
-                        # print("Y_before",y)
 
                         if x+box_width<=end_x:
                             y+=box_length
                         z=0
-                        # print("Y_after",y)
+                        
 
                         total_strips-=1
 
                     
-                    # if total_strips==0:
+                    
 
 
                 else:
                     num_strips = strip_list[box_num][3]
+                    storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
                     while num_strips > 0 and curr_weight+box_weight < max_weight:
                         ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                         z += box_height
@@ -1304,7 +1417,7 @@ def worker(df, container_toFit,strip_list,keys,roll):
                         curr_weight+=strip_list[box_num][9]
                         vol_occ+=box_length*box_width*box_height
 
-                    # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
+                    
                     x += box_width
                     z = 0
                     total_strips -= 1
@@ -1312,11 +1425,10 @@ def worker(df, container_toFit,strip_list,keys,roll):
                 
 
             else: 
-                # x = end_x
+                
                 y_min = min(y_min,y)
                 if x+box_width> width_container:
-                    # print("Inside1",end_x-x)
-                    # print("vol_wasted",abs(width_container-x)*box_length*height_container)
+                    
 
                     vol_wasted += abs(width_container-x)*box_length*height_container
 
@@ -1331,11 +1443,7 @@ def worker(df, container_toFit,strip_list,keys,roll):
                 
                 
 
-                # print("Y",y)
-                # print("prev_row_before",prev_row)
-                # print("prev_y",prev_y)
-                # print("x",x)
-                # print("Row",row)
+                
                 index=0
                 if x + box_width > width_container:
                     # efficiency_new.append([y_min,row])
@@ -1345,16 +1453,12 @@ def worker(df, container_toFit,strip_list,keys,roll):
                 while index<len(prev_row) and (prev_row[index][6]!=row-1):
                     index+=1
 
-                # print("INdex",index)
-                # print("prev_row_num",prev_row_num)
+                
                 rem=0
                 rem_y=0
                 went_in_1 = False
                 went_in_2 =False
                 if x!=0 and end_x-x< (x+box_width)-end_x: 
-                     ##Checks the better one between putting one extra or shifting according to the previous row
-                    # print("Inside2",end_x-x)
-                    # vol_wasted += (end_x-x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
                     rem=deepcopy(abs(x-end_x))
                     if len(prev_row) >1 and index<len(prev_row) and prev_row[index][6] == prev_row_num and prev_row[index][3] > prev_y:
                         went_in_1=True
@@ -1362,10 +1466,10 @@ def worker(df, container_toFit,strip_list,keys,roll):
                 else:
                     if len(prev_row) >1 and index<len(prev_row) and prev_row[index][6] == prev_row_num and prev_row[index][3] > prev_y and x + box_width <= width_container:
                         went_in_2=True
-                        # print("Inside3",end_x-x)
-                        # vol_wasted += (x+box_width-end_x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
+                        
                         num_strips = strip_list[box_num][3]
-                        # print("UES")
+                        storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
                         while num_strips > 0 and curr_weight+box_weight < max_weight:
                             ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                             z += box_height
@@ -1373,13 +1477,13 @@ def worker(df, container_toFit,strip_list,keys,roll):
                             curr_weight+=strip_list[box_num][9]
                             vol_occ+=box_length*box_width*box_height
 
-                        # storage_strip.append([x,y,z,box_length,box_width,box_height,box_num])
+                        
                         x += box_width
                         z = 0
                         total_strips -= 1
                         prev_row[len(prev_row)-1][2]=deepcopy(x)
                         rem=deepcopy(abs(x-end_x))
-                        # storage_strip[len(storage_strip)-1][2]=deepcopy(x)
+                        
 
 
                 p_y=0
@@ -1394,18 +1498,15 @@ def worker(df, container_toFit,strip_list,keys,roll):
 
 
                 y,end_x,row,prev_row,prev_y,prev_row_num= (findoptlen(prev_row,x,y,end_x,box_width,row,prev_y,prev_row_num))
-                # print("y_diff",abs(p_y-y))
-                # print("rem",rem)
+                
 
                 if x!=0 and went_in_1 is True:
                     # print("went_1_true:",y-box_length-p_y)
                     vol_wasted += abs(y-box_length-p_y)*rem*height_container
                 elif x!=0 and went_in_1 is False and went_in_2 is False:
-                    # print("went_1_false and went_2_false",p_y)
                     vol_wasted += abs(p_y)*rem*height_container
                 else:
                     if x!=0:
-                        # print("all others",y-p_y)
                         vol_wasted += abs(y-p_y)*rem*height_container
 
                 y_min = min(y_min,y)
@@ -1427,7 +1528,6 @@ def worker(df, container_toFit,strip_list,keys,roll):
                 y_min = min(y_min,y)
 
                 prev_row.append([x,y])
-                storage_strip.append([x,y])
 
 
         if y<0 and total_strips!=0 and curr_weight+box_weight<max_weight:
@@ -1441,15 +1541,10 @@ def worker(df, container_toFit,strip_list,keys,roll):
                     if x + box_width <= end_x and x + box_width <= width_container:  ## added the max weight check constraints
                         # print("prev_row",prev_row)
                         if len(prev_row) >1 and prev_row[len(prev_row)-2][1]>=0 and y-prev_row[len(prev_row)-2][1] > box_length and row== prev_row[len(prev_row)-2][6]:
-                            # x-= box_width
-                            
-                            # print("x",x)
-                            # print("y",y)
-
-                            # print("yes went inside")
-                            # y = y-box_length
                             num_strips = strip_list[box_num][3]
                             # print("UES")
+                            storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
                             while num_strips > 0 and curr_weight+box_weight < max_weight:
                                 ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                 z += box_height
@@ -1471,11 +1566,13 @@ def worker(df, container_toFit,strip_list,keys,roll):
                                 else:
                                     continue
                                 prev_row[len(prev_row)-1][1]=deepcopy(y)
-                                storage_strip[len(storage_strip)-1][1]=deepcopy(y)
+                                # storage_strip[len(storage_strip)-1][1]=deepcopy(y)
                                 
 
                                 num_strips = strip_list[box_num][3]
                                 # print("UES")
+                                storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
                                 while num_strips > 0 and curr_weight+box_weight < max_weight:
                                     ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                     z += box_height
@@ -1499,6 +1596,8 @@ def worker(df, container_toFit,strip_list,keys,roll):
 
                         else:
                             num_strips = strip_list[box_num][3]
+                            storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
                             while num_strips > 0 and curr_weight+box_weight < max_weight:
                                 ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                 z += box_height
@@ -1568,6 +1667,8 @@ def worker(df, container_toFit,strip_list,keys,roll):
                                 # vol_wasted += (x+box_width-end_x)*abs(prev_row[len(prev_row)-1][4]-box_length)*height_container
                                 num_strips = strip_list[box_num][3]
                                 # print("UES")
+                                storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
+
                                 while num_strips > 0 and curr_weight+box_weight < max_weight:
                                     ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
                                     z += box_height
@@ -1632,7 +1733,7 @@ def worker(df, container_toFit,strip_list,keys,roll):
                         y_min = min(y_min,y)
 
                         prev_row.append([x,y])
-                        storage_strip.append([x,y])
+                        # storage_strip.append([x,y])
 
             
 
@@ -1646,11 +1747,39 @@ def worker(df, container_toFit,strip_list,keys,roll):
         df.at[box_num,'Marked'] = 0
         
         # stored_plac.append([init_x,init_y,init_z,x,y,z,box_num,box_length,box_width,box_height,row])
-        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,total_strips,vol_wasted
+        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,total_strips,vol_wasted,storage_strip
+    
+
+    def stability(weight_leftHalf, weight_rightHalf,best_widht_order,curr_width_order,vol_wasted,vol_occupied):
+    # Finding the percentage difference betweeenn the load on the front and rear axel from the centre line 
+        front_axel_perc = weight_leftHalf/(weight_rightHalf+weight_leftHalf)
+        penalty_weight = 0
+        penalty_width_order = 0
+        if front_axel_perc>0.6 :
+            penalty_weight = abs(front_axel_perc-0.6)*10
+        elif front_axel_perc<0.5:
+            penalty_weight = abs(front_axel_perc-0.5)*10
+
+        for i in range(len(curr_width_order)):
+            if best_widht_order[i]==curr_width_order[i]:
+                penalty_width_order+=1
+            else:
+                penalty_width_order-=1
+
+        # print(best_widht_order)
+        # print(curr_width_order)
+        # print("Vol_was", 0.8*vol_wasted)
+        # print("Vol_occ",0.1*vol_occupied)
+        # print("width_order", 0.05*penalty_width_order)
+        # print("weight_pen", 0.05*penalty_weight)
+
+        
+        stab = round(0.8*vol_wasted-( 0.1*vol_occupied/100)-0.05*penalty_width_order-0.05*penalty_weight,2)
+
+        return stab
 
 
-
-    def create_bottom_view(ax, iteration, vol_occ_curr, vol_wasted, keys, roll):
+    def create_bottom_view(ax, iteration, vol_occ_curr, vol_wasted, keys, roll,stability_fin):
     # Adjust the viewing angle for bottom view
         ax.view_init(elev=90, azim=180)
         keys=keys.replace("'","")
@@ -1663,6 +1792,10 @@ def worker(df, container_toFit,strip_list,keys,roll):
         
         # Construct the filename including the iteration number, keys, and roll
         # filename = f'bottom_view_iteration_{iteration}_keys_{keys}_roll_{roll}.png'
+        text_bottom = f'stability_fin: {stability_fin}'
+        ax.text2D(0.05, 0.05, text_bottom, transform=ax.transAxes, fontsize=12,
+                verticalalignment='bottom', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+        
         filename = os.path.join('static', f"bottom_view_iteration_{iteration}_keys_{keys}_roll_{roll}.png")
         plt.savefig(filename)
         
@@ -1671,6 +1804,26 @@ def worker(df, container_toFit,strip_list,keys,roll):
 
         return filename
     # Return the filename for reference
+    def weight_distribution(container_toFit,storage_strip):
+        weight_sum_lower_half = 0
+        weight_sum_upper_half = 0
+
+        # Calculate the threshold for comparison
+        threshold = container_toFit.length / 2
+
+        # Iterate through the storage_strip list and sum weights based on the condition
+        for item in storage_strip:
+            y, weight = item
+            if y < threshold:
+                weight_sum_lower_half += weight
+            else:
+                weight_sum_upper_half += weight
+
+        # Print the results
+        # print("Sum of weights for y < container_length / 2:", weight_sum_lower_half)
+        # print("Sum of weights for y > container_length / 2:", weight_sum_upper_half)
+
+        return weight_sum_lower_half,weight_sum_upper_half
 
 
     def generate_colors(n):
@@ -1694,22 +1847,34 @@ def worker(df, container_toFit,strip_list,keys,roll):
         numbers = list(range(n))
         perms = list(permutations(numbers))
         return perms
+    
+    def widthOrder(strip_list):
+        temp = []
+        for details in strip_list:
+            temp.append(details[1])
+        temp.sort(reverse=True)
+
+        return temp
 
     n = len(strip_list)
     perms = generate_permutations(n)
     perms = list(perms)
 
-    efficiency = []
+    weight_storer = []
     df_stored=[]
     all_y_min=[]
     file_storer =[]
     vol_eff =[]
     wasted_vol = []
-    
+    best_width_order = widthOrder(strip_list)
+    min_stab= 1e5
+    max_index3=-1
 
     for i in range(len(perms)):
         # if i !=18:
         print(perms[i])
+        curr_order =[]
+
         #     continue
         # print("iteration: ",i)
         # print("Perm",perms[i])
@@ -1745,6 +1910,9 @@ def worker(df, container_toFit,strip_list,keys,roll):
         x,z= 0,0
         # print("Perm",perms[i])
         for j in range(len(perms[i])):
+            curr_order.append(strip_list[perms[i][j]][1])
+
+
             # print("Memory usage at {i}:", memory_usage(), "MB")
 
             # print(perms[i][j])
@@ -1769,15 +1937,15 @@ def worker(df, container_toFit,strip_list,keys,roll):
                 y = y-1+prev_row[len(prev_row)-1][4]-strip_list[perms[i][j]][0]
                 y_min = min(y_min,y)
                 prev_row.append([x,y])
-                storage_strip.append([x,y])
-                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,tmp,total_strips,vol_wasted= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,tmp,vol_wasted)
+                # storage_strip.append([x,y])
+                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,tmp,total_strips,vol_wasted,storage_strip= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,tmp,vol_wasted)
             else:
                 if(j!=0 and row==0):
                     y = y-1+prev_row[len(prev_row)-1][4]-strip_list[perms[i][j]][0]
                 y_min = min(y_min,y)
                 prev_row.append([x,y])
-                storage_strip.append([x,y])
-                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,tmp,total_strips,vol_wasted= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,tmp,vol_wasted)
+                # storage_strip.append([x,y])
+                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,tmp,total_strips,vol_wasted,storage_strip= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,tmp,vol_wasted)
             
             tmp.at[perms[i][j], 'Rem_Strips'] =total_strips
             tmp.at[perms[i][j],'Marked'] = 0
@@ -1793,25 +1961,23 @@ def worker(df, container_toFit,strip_list,keys,roll):
         if y_min <0:
             y_min = 0        
         vol_occ_curr =round(vol_occ/(container_toFit.length*container_toFit.width*container_toFit.height),2)*100
-        filename = create_bottom_view(ax, i,vol_occ_curr,round(vol_wasted*pow(10,-9),2),keys,roll)
-        file_storer.append(filename)
         wasted_vol.append(round(vol_wasted*pow(10,-9),2))
-        all_y_min.append(y_min)
         vol_eff.append(vol_occ_curr)
+        weight_storer.append(storage_strip)
+        weight_leftHalf, weight_rightHalf = weight_distribution(container_toFit,storage_strip)
+        stability_fin = stability(weight_leftHalf,weight_rightHalf,best_width_order,curr_order,round(vol_wasted*pow(10,-9),2),round(vol_occ/(container_toFit.length*container_toFit.width*container_toFit.height),2)*100)
+        # print(stability_fin)
+        if min_stab>stability_fin:
+            min_stab = stability_fin
+            max_index3 = i
+        filename = create_bottom_view(ax, i,vol_occ_curr,round(vol_wasted*pow(10,-9),2),keys,roll,stability_fin)
+        file_storer.append(filename)
+        all_y_min.append(y_min)
         # print("Memory usage:", memory_usage(), "MB")
         ax.clear()
+       
     
-    # max_efficiency3 = max(all_y_min)
-    # max_index3 = all_y_min.index(max_efficiency3)
-    max_vol_wasted = min(wasted_vol)
-    max_index3 = wasted_vol.index(max_vol_wasted)
-    # print("Least Y occupied:", max_efficiency3)
-    # print("Iteration Number (0-indexed):", max_index3)
-    iteration_number= max_index3
-    # for i in range(len(df)):
-    #     if df.at[i,'Marked']==1:
-    #         df.at[i,'Rem_Strips'] = df.at[i,'TotalNumStrips']
-    # df.drop(columns=['Marked'], inplace=True)
+
 
 
     # df_html = df.to_html()  
@@ -1858,7 +2024,7 @@ def load_backend_function():
         outer_index+=1
     # selected_truck_spec = truck_specs.get(truck_spec, {})
 
-    print(img_paths)
+    # print(img_paths)
 
     response = {
     'show_optimal_solution': True,  # Set this to True if you want to display the optimal solution
@@ -1869,7 +2035,7 @@ def load_backend_function():
 
     # # Print maximum memory usage
     # print("Max memory usage:", max_memory_usage, "MB")
-    # print(response)s
+    # print(response)
 
     
     return jsonify(response)
@@ -1960,7 +2126,7 @@ def upload():
 
         outer_index+=1
 
-        print(img_paths)
+        # print(img_paths)
     
 
     return render_template('output.html', tables=df_storer,img_paths = img_paths)
