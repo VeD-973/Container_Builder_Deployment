@@ -975,7 +975,7 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
                     else:
                         dw = True
                         break
-                nH_list[index][3] -= rem_boxes-temp
+                nH_list[index][3] = temp
                 total_boxes-=(rem_boxes-temp)
                 if(dw==False and nH_list[index][3]==0):
                     index+=1
@@ -1001,7 +1001,7 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
 
         # plt.show()
 
-        return  x,y,z,vol_occ,y_min,df,vol_wasted,storage_strip
+        return  x,y,z,vol_occ,y_min,df,vol_wasted,storage_strip,nH_list
 
 
     def stability(weight_leftHalf, weight_rightHalf,best_widht_order,curr_width_order,vol_wasted,vol_occupied):
@@ -1180,7 +1180,7 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
 
     for i in range(len(df)):
         nH_list.append([df.at[i,'Length'],df.at[i,'Width'],df.at[i,'Height'],df.at[i,'Rem_Boxes'],i,df.at[i,'GrossWeight']])
-    x,y,z,vol_occ,y_min,df,vol_wasted,storage_strip = place_nonH(x,y,z,colors,nH_list,container_toFit,ax,curr_weight,stored_plac,vol_occ,y_min,df,vol_wasted)
+    x,y,z,vol_occ,y_min,df,vol_wasted,storage_strip,nH_list = place_nonH(x,y,z,colors,nH_list,container_toFit,ax,curr_weight,stored_plac,vol_occ,y_min,df,vol_wasted)
 
 
     if y_min <0:
@@ -1790,7 +1790,8 @@ def worker(df, container_toFit,strip_list,keys,roll):
                     else:
                         dw = True
                         break
-                nH_list[index][3] -= rem_boxes-temp
+                nH_list[index][3] = temp
+                df.at[box_num,'Rem_Boxes'] = temp
                 total_boxes-=(rem_boxes-temp)
                 if(dw==False and nH_list[index][3]==0):
                     index+=1
@@ -1816,11 +1817,11 @@ def worker(df, container_toFit,strip_list,keys,roll):
 
         # plt.show()
 
-        return  x,y,z,vol_occ,y_min,df,vol_wasted,storage_strip
+        return  x,y,z,vol_occ,y_min,df,vol_wasted,storage_strip,nH_list,df
 
     def stability(weight_leftHalf, weight_rightHalf,best_widht_order,curr_width_order,vol_wasted,vol_occupied):
     # Finding the percentage difference betweeenn the load on the front and rear axel from the centre line 
-        front_axel_perc = weight_leftHalf/(weight_rightHalf+weight_leftHalf)
+        front_axel_perc = weight_leftHalf/(weight_rightHalf+weight_leftHalf+0.01)
         penalty_weight = 0
         penalty_width_order = 0
         if front_axel_perc>0.6 :
@@ -2029,7 +2030,7 @@ def worker(df, container_toFit,strip_list,keys,roll):
 
         for m in range(len(tmp)):
             nH_list.append([tmp.at[m,'Length'],tmp.at[m,'Width'],tmp.at[m,'Height'],tmp.at[m,'Rem_Boxes'],m,tmp.at[m,'GrossWeight']])
-        x,y,z,vol_occ,y_min,tmp,vol_wasted,storage_strip = place_nonH(x,y,z,colors,nH_list,container_toFit,ax,curr_weight,stored_plac,vol_occ,y_min,tmp,vol_wasted)
+        x,y,z,vol_occ,y_min,tmp,vol_wasted,storage_strip,nH_list,tmp = place_nonH(x,y,z,colors,nH_list,container_toFit,ax,curr_weight,stored_plac,vol_occ,y_min,tmp,vol_wasted)
  
         if y_min <0:
             y_min = 0        
@@ -2146,68 +2147,62 @@ def upload():
     if 'file' not in request.files:
         return 'No file part'
     
-    # truck_specification = request.form['truckSpec']
     file = request.files['file']
-
     
     if file.filename == '':
         return 'No selected file'
+    
+    # print(request.form)
+    
     total_containers = int(request.form['totalContainers'])
 
     # Retrieve the type and count of each container
     container_data = {}
+    # print(total_containers)
     for i in range(1, total_containers + 1):
         container_type = request.form['containerType{}'.format(i)]
+        if container_type == "Custom Container":
+            custom_length = int(request.form['customLength'])
+            custom_width = int(request.form['customWidth'])
+            custom_height = int(request.form['customHeight'])
+            custom_max_weight = int(request.form['customMaxWeight'])
+            
+            # Add custom container specs to the truck_specs dictionary
+            truck_specs["Custom Container"] = {
+                'length_container': custom_length,
+                'width_container': custom_width,
+                'height_container': custom_height,
+                'max_weight': custom_max_weight
+                }
         container_count = int(request.form['containerCount{}'.format(i)])
         container_data[container_type] = container_count
 
-    # print(container_data)
 
-    
     df = pd.read_excel(file)
     save_data_to_files(df, container_data)
-    # df,container_toFit,strip_list= dataProcess_1(df,selected_truck_spec)
-
-    # print(df)
-    df_storer=[]
-    img_paths=[]
-    outer_index= 0
- 
-    # for keys, values in container_data.items():
-    #     roll = values
-    #     index_= 0
-    #     while roll>0:
-    #         filename,df= perform_computation(df,container_toFit,strip_list,keys,index_)
-    #         df_storer.append(df.to_html(classes='data')) 
-    #         index_+=1
-    #         roll-=1
-    #         img_paths.append(filename)
+    df_storer = []
+    img_paths = []
+    outer_index = 0
 
     for keys, values in container_data.items():
         selected_truck_spec = truck_specs.get(keys, {})
-        # print("selected_truck_specs",selected_truck_spec)
-        if outer_index==0:
-            df,container_toFit,strip_list= dataProcess_1(df,selected_truck_spec)
-        if outer_index!=0:
-            # print("df_prev",df)
-            df,container_toFit,strip_list = dataProcess_2(df,selected_truck_spec)
-            # print("df_after",df)
+        if outer_index == 0:
+            df, container_toFit, strip_list = dataProcess_1(df, selected_truck_spec)
+        if outer_index != 0:
+            df, container_toFit, strip_list = dataProcess_2(df, selected_truck_spec)
 
         roll = values
-        index_= 0
-        while roll>0:
-            filename,df= perform_computation(df,container_toFit,strip_list,keys,index_)
-            df_storer.append(df.to_html(classes='data')) 
-            index_+=1
-            roll-=1
+        index_ = 0
+        while roll > 0:
+            filename, df = perform_computation(df, container_toFit, strip_list, keys, index_)
+            df_storer.append(df.to_html(classes='data'))
+            index_ += 1
+            roll -= 1
             img_paths.append(filename)
 
-        outer_index+=1
+        outer_index += 1
 
-        # print(img_paths)
-    
-
-    return render_template('output.html', tables=df_storer,img_paths = img_paths)
+    return render_template('output.html', tables=df_storer, img_paths=img_paths)
 
 if __name__ == '__main__':
     app.run(debug=True)

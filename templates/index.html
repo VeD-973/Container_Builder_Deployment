@@ -191,7 +191,13 @@
                 "image": "static/high_container_40.png"
 
             },
-            // Add more specifications as needed
+            "Custom Container": {
+                "length_container": null,
+                "width_container": null,
+                "height_container": null,
+                "max_weight": null,
+                "image": null
+            }
         };
 
         function showTruckDimensions() {
@@ -219,7 +225,7 @@
 
         function getTruckDimensions(selectedOption) {
             var specs = truck_specs[selectedOption];
-            if (specs) {
+            if (specs && specs.length_container && specs.width_container && specs.height_container && specs.max_weight) {
                 return "Length: " + specs.length_container + "mm, Width: " + specs.width_container + "mm, Height: " + specs.height_container + "mm, Max Weight: " + specs.max_weight + "kg";
             }
             return null;
@@ -313,13 +319,22 @@
                 // Show dimensions and image
                 var dimensionsDiv = document.getElementById('dimensions' + (Array.prototype.indexOf.call(selects, select) + 1));
                 if (dimensionsDiv) {
-                    var dimensions = getTruckDimensions(select.value);
-                    dimensionsDiv.innerHTML = '<p>' + dimensions + '</p>';
-                    var imgSrc = truck_specs[select.value].image;
-                    var img = document.createElement("img");
-                    img.src = imgSrc;
-                    img.alt = select.value;
-                    dimensionsDiv.appendChild(img);
+                    if (select.value === "Custom Container") {
+                        dimensionsDiv.innerHTML = '<label>Length: <input type="number" name="customLength" required></label>' +
+                                                  '<label>Width: <input type="number" name="customWidth" required></label>' +
+                                                  '<label>Height: <input type="number" name="customHeight" required></label>' +
+                                                  '<label>Max Weight: <input type="number" name="customMaxWeight" required></label>';
+                    } else {
+                        var dimensions = getTruckDimensions(select.value);
+                        dimensionsDiv.innerHTML = '<p>' + dimensions + '</p>';
+                        if (truck_specs[select.value].image) {
+                            var imgSrc = truck_specs[select.value].image;
+                            var img = document.createElement("img");
+                            img.src = imgSrc;
+                            img.alt = select.value;
+                            dimensionsDiv.appendChild(img);
+                        }
+                    }
                 }
             });
         }
