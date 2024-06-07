@@ -88,6 +88,20 @@
             cursor: pointer;
             font-size: 16px;
         }
+        button {
+            background-color: #45a049; /* Set background color */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #3e8e41; /* Change to a slightly darker shade on hover */
+            color: white;
+        }
 
         button[type="submit"]:hover {
             background-color: #45a049;
@@ -372,6 +386,9 @@
 
         <button type="submit">Upload</button>
     </form>
+    <div style="text-align: center; margin-top: 30px; ;">
+        <button onclick="window.location.href='/dataProcess'"">Data Processing</button>
+    </div>
 </div>
 </body>
 </html>

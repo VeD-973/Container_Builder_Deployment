@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Processing</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #eef2f3;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #444;
+        }
+
+        p {
+            text-align: center;
+            font-size: 18px;
+            color: #666;
+        }
+
+        #fileUploadForm {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #fileUploadForm label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        #fileUploadForm input[type="file"] {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        #fileUploadForm button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        #fileUploadForm button:hover {
+            background-color: #0056b3;
+        }
+
+        #columnsContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 30px;
+        }
+
+        .column-box {
+            width: 100%;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            background-color: #f9f9f9;
+            margin-bottom: 20px;
+        }
+
+        .column-box h3 {
+            text-align: center;
+            margin-bottom: 15px;
+            color: #555;
+        }
+
+        .column-box table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .column-box th, .column-box td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .column-box th {
+            background-color: #f1f1f1;
+        }
+
+        #matchedColumnsButton {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        #matchedColumnsButton button {
+            background-color: #28a745;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        #matchedColumnsButton button:hover {
+            background-color: #218838;
+        }
+
+        .delete-column-button {
+            background-color: lightgrey;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .delete-column-button:hover {
+            background-color: #b0b0b0;
+        }
+
+        select {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Data Processing Page</h1>
+    <form id="fileUploadForm" enctype="multipart/form-data" action="/upload_excel" method="POST">
+        <label for="file">Upload Excel File:</label>
+        <input type="file" id="file" name="file" accept=".xlsx, .xls" required>
+        <button type="submit">Upload</button>
+    </form>
+    <div id="columnsContainer">
+        <div class="column-box">
+            <h3>Specify Column Mappings</h3>
+            <table id="mappingTable">
+                <thead>
+                    <tr>
+                        <th>Company Column</th>
+                        <th>OptiPack Columns</th>
+                        <th>Unit</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div id="matchedColumnsButton">
+        <button onclick="sendMatchedColumns()">Send Matched Columns</button>
+    </div>
+</div>
+
+<script>
+    document.getElementById('fileUploadForm').onsubmit = function(event) {
+        event.preventDefault();
+        var formData = new FormData(this);
+
+        fetch('/upload_excel', {
+            method: 'POST',
+            body: formData
+        }).then(response => response.json())
+          .then(data => {
+              if (data.success) {
+                  populateColumns(data.columns, data.specified_columns, data.units);
+              } else {
+                  alert('Failed to upload file.');
+              }
+          })
+          .catch(error => console.error('Error:', error));
+    };
+
+    function populateColumns(columns, specifiedColumns, units) {
+        var mappingTableBody = document.getElementById('mappingTable').querySelector('tbody');
+        mappingTableBody.innerHTML = '';
+
+        specifiedColumns.forEach(specifiedColumn => {
+            var row = document.createElement('tr');
+
+            var companyCell = document.createElement('td');
+            var select = document.createElement('select');
+            select.setAttribute('data-specified-column', specifiedColumn);
+            columns.forEach(column => {
+                var option = document.createElement('option');
+                option.value = column;
+                option.textContent = column;
+                select.appendChild(option);
+            });
+            select.addEventListener('change', updateDropdowns);
+            companyCell.appendChild(select);
+
+            var specifiedCell = document.createElement('td');
+            specifiedCell.textContent = specifiedColumn;
+
+            var unitCell = document.createElement('td');
+            var unitSelect = document.createElement('select');
+            unitSelect.setAttribute('data-specified-column', specifiedColumn);
+            units[specifiedColumn].forEach(unit => {
+                var option = document.createElement('option');
+                option.value = unit;
+                option.textContent = unit;
+                unitSelect.appendChild(option);
+            });
+            unitCell.appendChild(unitSelect);
+
+            var actionCell = document.createElement('td');
+            var deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Delete';
+            deleteButton.classList.add('delete-column-button');
+            deleteButton.onclick = function() {
+                mappingTableBody.removeChild(row);
+                updateDropdowns();
+            };
+
+            actionCell.appendChild(deleteButton);
+            row.appendChild(companyCell);
+            row.appendChild(specifiedCell);
+            row.appendChild(unitCell);
+            row.appendChild(actionCell);
+
+            mappingTableBody.appendChild(row);
+        });
+
+        updateDropdowns();
+    }
+
+    function updateDropdowns() {
+        var selects = document.querySelectorAll('select[data-specified-column]');
+        var selectedValues = Array.from(selects).map(select => select.value);
+
+        selects.forEach(select => {
+            var currentValue = select.value;
+            select.querySelectorAll('option').forEach(option => {
+                if (selectedValues.includes(option.value) && option.value !== currentValue) {
+                    option.style.display = 'none';
+                } else {
+                    option.style.display = 'block';
+                }
+            });
+        });
+    }
+
+    function sendMatchedColumns() {
+        var rows = document.querySelectorAll('#mappingTable tbody tr');
+        var matchedColumns = {};
+
+        rows.forEach(row => {
+            var companyColumn = row.querySelector('td:nth-child(1) select').value;
+            var specifiedColumn = row.querySelector('td:nth-child(2)').textContent;
+            var unit = row.querySelector('td:nth-child(3) select').value;
+            matchedColumns[specifiedColumn] = { column: companyColumn, unit: unit };
+        });
+
+        fetch('/match_columns', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(matchedColumns)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert("Your columns were matched!");
+                window.location.href = '/mapping';
+            } else {
+                alert('Failed to process matched columns.');
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+</script>
+</body>
+</html>
