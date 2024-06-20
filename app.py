@@ -11,11 +11,11 @@ import os
 import heapq
 import bisect
 
+
 app = Flask(__name__)
 
 storage_boxes=pd.DataFrame()
 storage_truck_spec={}
-
 max_memory_usage = 0  # Initialize max memory usage
 
 
@@ -278,21 +278,24 @@ def index():
 
 
 # Used to place the boxes in a strip with height constraint 
-def placeStrips(box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y):
+def placeStrips(box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y,box_storer,row):
 
     #Used to retrieve the number of boxes in strip from striplist
     num_boxes_in_a_strip = strip_list[box_num][3]
+
 
     #Used to store strip for further calculations 
     storage_strip.append([y,strip_list[box_num][3] * strip_list[box_num][9]])
     while num_boxes_in_a_strip > 0 and curr_weight+box_weight < max_weight:
         ax.bar3d(x, y, z, box_width, box_length, box_height, color=color, edgecolor='black')
+        box_storer.append({"start": {"x": x, "y": y, "z": z}, "end": {"x": x, "y": y, "z": z+box_height}, "color":color,
+                            "dimensions":{"length":box_length,"width":box_width,"height":box_height},"row":row})
         z += box_height
         num_boxes_in_a_strip -= 1
         curr_weight+=strip_list[box_num][9]
         vol_occ+=box_length*box_width*box_height
     
-    return box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y
+    return box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y,box_storer,row
 
 
 #Checks which one is more filling and keeps less space after placing in a row. (Row-wise)
@@ -353,14 +356,14 @@ def findoptlen(prev_row,x,y,end_x,box_width,row,prev_y,prev_row_num,container_to
 
 #Main box placing algorithm.
 
-def box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,container_toFit,row,prev_y,color,allowed):
+def box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,container_toFit,row,prev_y,color,allowed,box_storer):
 
     while total_strips > 0 and y > 0 and curr_weight+box_weight<max_weight:
         if x + box_width <= end_x and x + box_width <= width_container:  ## added the max weight check constraints
          
             if len(prev_row) >1 and prev_row[len(prev_row)-2][1]>=0 and y-prev_row[len(prev_row)-2][1] > box_length and row== prev_row[len(prev_row)-2][6]:
                 
-                box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y =placeStrips(box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y)
+                box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y,box_storer,row =placeStrips(box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y,box_storer,row)
 
           
                 z = 0
@@ -377,7 +380,7 @@ def box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,bo
                     prev_row[len(prev_row)-1][1]=deepcopy(y)
                     
                     
-                    box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y =placeStrips(box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y)
+                    box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y,box_storer,row =placeStrips(box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y,box_storer,row)
 
                     
                     x+=box_width
@@ -393,7 +396,7 @@ def box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,bo
 
 
             else:
-                box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y =placeStrips(box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y)
+                box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y,box_storer,row =placeStrips(box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y,box_storer,row)
                 
            
                 x += box_width
@@ -458,7 +461,7 @@ def box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,bo
                 if len(prev_row) >1 and index<len(prev_row) and prev_row[index][6] == prev_row_num and prev_row[index][3] > prev_y and x + box_width <= width_container:
                     went_in_2=True
                   
-                    box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y =placeStrips(box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y)
+                    box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y,box_storer,row =placeStrips(box_num,storage_strip,strip_list,ax,z,box_height,curr_weight,vol_occ,box_length,box_width,max_weight,color,box_weight,x,y,box_storer,row)
                     x += box_width
                     z = 0
                     total_strips -= 1
@@ -508,7 +511,7 @@ def box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,bo
 
             prev_row.append([x,y])
 
-    return total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,row,prev_y,color
+    return total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,row,prev_y,color,box_storer
     
 
 #Used to create the base ax plot on which the boxes will be placed. (3D)
@@ -732,7 +735,7 @@ def choose_best_dimension(x,end_x,z,strip_list,container,stored_plac,df):
 
 def perform_computation(df,container_toFit,strip_list,key,roll):
 
-    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted):
+    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted,box_storer):
         width_container = float(container.width)
         height_container = float(container.height)
         depth_container = float(container.length)
@@ -758,7 +761,7 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
             box_width = deepcopy(temp)
             prev_row[len(prev_row)-1][1] = prev_row[len(prev_row)-1][1] + box_width- box_length
             y = y-box_length
-        total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,row,prev_y,color =box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,container,row,prev_y,color,1)
+        total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,row,prev_y,color,box_storer =box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,container,row,prev_y,color,1,box_storer)
 
 
         
@@ -769,7 +772,7 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
                 temp = deepcopy(box_length)
                 box_length = deepcopy(box_width)
                 box_width = deepcopy(temp)
-                total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,row,prev_y,color =box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,container,row,prev_y,color,0)
+                total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,row,prev_y,color,box_storer =box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,container,row,prev_y,color,0,box_storer)
             
 
         prev_row[len(prev_row)-1].append(x)
@@ -780,7 +783,7 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
         y_min = min(y_min,y)
         df.at[box_num, 'Rem_Strips'] =total_strips
         df.at[box_num,'Marked'] = 0
-        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip,curr_weight
+        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip,curr_weight,box_storer
     
     
     #Creating the bottom view snapshot of the 3d plot
@@ -820,6 +823,7 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
 
     #Creating the required lists and variables for data handling 
     stored_plac = []
+    box_storer=[]
     storage_strip=[]
     prev_row= []
     curr_width_order = []
@@ -854,12 +858,12 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
             y = y-1+prev_row[len(prev_row)-1][4]-strip_list[ans][0]
             y_min = min(y_min,y)
             prev_row.append([x,y])
-            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip,curr_weight= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
+            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip,curr_weight,box_storer= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted,box_storer)
         else:
             if(i!=0 and row==0):
                 y = y-1+prev_row[len(prev_row)-1][4]-strip_list[ans][0]
             prev_row.append([x,y])
-            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip,curr_weight= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted)
+            x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,vol_wasted,storage_strip,curr_weight,box_storer= after_plac(x,y,z,end_x,ans,strip_list,container_toFit,ax,colors[ans],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted,box_storer)
     
 
     #Non homo placement
@@ -882,7 +886,10 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
     best_width_order = widthOrder(strip_list)
     stability_fin = stability(weight_leftHalf,weight_rightHalf,best_width_order,curr_width_order,round(vol_wasted*pow(10,-9),2),vol_occ_curr)
     filename_final = create_bottom_view(ax,vol_occ_curr,perc_wasted,key,roll,stability_fin,packaging_density)
-
+    # print(box_storer)
+    box_storer.append({"last_box_y":container_toFit.length-y_min})
+    with open('static/box_coordinates.json', 'w') as file:
+        json.dump(box_storer, file)
     #returning the filename and dataframe to the frontend to display
     return filename_final,df
 
@@ -893,7 +900,7 @@ def worker(df, container_toFit,strip_list,keys,roll,container_num):
     width_container = container_toFit.width
     height_container = container_toFit.height
     
-    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted):
+    def after_plac(x,y,z,end_x,box_num,strip_list,container,ax,color,curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,df,vol_wasted,box_storer):
         width_container = float(container.width)
         height_container = float(container.height)
         depth_container = float(container.length)
@@ -922,7 +929,7 @@ def worker(df, container_toFit,strip_list,keys,roll,container_num):
 
 
 
-        total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,row,prev_y,color =box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,container,row,prev_y,color,1)
+        total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,row,prev_y,color,box_storer =box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,container,row,prev_y,color,1,box_storer)
 
         if y<0 and total_strips!=0 and curr_weight+box_weight<max_weight:
             y+=box_length
@@ -931,7 +938,7 @@ def worker(df, container_toFit,strip_list,keys,roll,container_num):
                 temp = deepcopy(box_length)
                 box_length = deepcopy(box_width)
                 box_width = deepcopy(temp)
-                total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,row,prev_y,color =box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,container,row,prev_y,color,1)
+                total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,row,prev_y,color,box_storer =box_placer(total_strips,x,y,z,curr_weight,box_weight,box_length,box_width,box_height,max_weight,box_num,storage_strip,strip_list,ax,vol_occ,prev_row,end_x,width_container,y_min,vol_wasted,prev_row_num,height_container,container,row,prev_y,color,1,box_storer)
 
             
 
@@ -944,7 +951,7 @@ def worker(df, container_toFit,strip_list,keys,roll,container_num):
         df.at[box_num, 'Rem_Strips'] =total_strips
         df.at[box_num,'Marked'] = 0
         
-        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,total_strips,vol_wasted,storage_strip,curr_weight
+        return x, y, z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,df,total_strips,vol_wasted,storage_strip,curr_weight,box_storer
     
 
     def create_bottom_view(ax, iteration, vol_occ_curr, vol_wasted, keys, roll, stability_fin, container_num, packaging_density):
@@ -1007,6 +1014,7 @@ def worker(df, container_toFit,strip_list,keys,roll,container_num):
         vol_wasted=0
         stored_plac = []
         storage_strip=[]
+        box_storer=[]
         vol_occ = 0
         ax = create_plot(container_toFit)
         y_min = 1e5
@@ -1036,13 +1044,13 @@ def worker(df, container_toFit,strip_list,keys,roll,container_num):
                 y = y-1+prev_row[len(prev_row)-1][4]-strip_list[perms[i][j]][0]
                 y_min = min(y_min,y)
                 prev_row.append([x,y])
-                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,tmp,total_strips,vol_wasted,storage_strip,curr_weight= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,tmp,vol_wasted)
+                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,tmp,total_strips,vol_wasted,storage_strip,curr_weight,box_storer= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,tmp,vol_wasted,box_storer)
             else:
                 if(j!=0 and row==0):
                     y = y-1+prev_row[len(prev_row)-1][4]-strip_list[perms[i][j]][0]
                 y_min = min(y_min,y)
                 prev_row.append([x,y])
-                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,tmp,total_strips,vol_wasted,storage_strip,curr_weight= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,tmp,vol_wasted)
+                x,y,z,row,prev_y,prev_row,end_x,prev_row_num,vol_occ,y_min,tmp,total_strips,vol_wasted,storage_strip,curr_weight,box_storer= after_plac(x,y,z,end_x,perms[i][j],strip_list,container_toFit,ax,colors[perms[i][j]],curr_weight,stored_plac,row,storage_strip,prev_y,prev_row,prev_row_num,vol_occ,y_min,tmp,vol_wasted,box_storer)
             
             tmp.at[perms[i][j],'Rem_Strips'] =total_strips
             tmp.at[perms[i][j],'Marked'] = 0
@@ -1281,5 +1289,9 @@ def upload():
 
     return render_template('output.html', tables=df_storer, img_paths=img_paths)
 
+@app.route('/child')
+def child():
+    return render_template('child.html')
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(debug=True)
