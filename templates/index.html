@@ -147,17 +147,17 @@
                 var rowDiv = document.createElement("div");
                 rowDiv.classList.add("input-row");
 
-                rowDiv.appendChild(createInput("Gross Weight:", "text", "grossWeight"));
-                rowDiv.appendChild(createInput("Net Weight:", "text", "netWeight"));
-                rowDiv.appendChild(createInput("Volume:", "text", "volume"));
-                rowDiv.appendChild(createInput("Temperature:", "text", "temperature"));
-                rowDiv.appendChild(createInput("Length:", "text", "length"));
-                rowDiv.appendChild(createInput("Width:", "text", "width"));
-                rowDiv.appendChild(createInput("Height:", "text", "height"));
-                rowDiv.appendChild(createInput("Number of Cases:", "text", "numberOfCases"));
+                rowDiv.appendChild(createInput("Gross Weight:", "text", "grossWeight" + i));
+                rowDiv.appendChild(createInput("Net Weight:", "text", "netWeight" + i));
+                rowDiv.appendChild(createInput("Volume:", "text", "volume" + i));
+                rowDiv.appendChild(createInput("Temperature:", "text", "temperature" + i));
+                rowDiv.appendChild(createInput("Length:", "text", "length" + i));
+                rowDiv.appendChild(createInput("Width:", "text", "width" + i));
+                rowDiv.appendChild(createInput("Height:", "text", "height" + i));
+                rowDiv.appendChild(createInput("Number of Cases:", "text", "numberOfCases" + i));
 
                 // Add rotation allowed cell
-                var rotationCell = createInput("Rotation Allowed:", "checkbox", "rotationAllowed");
+                var rotationCell = createInput("Rotation Allowed:", "checkbox", "rotationAllowed" + i);
                 rotationCell.classList.add("checkbox-label"); // Add a class for styling
                 rowDiv.appendChild(rotationCell);
 

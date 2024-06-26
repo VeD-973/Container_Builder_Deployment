@@ -890,6 +890,9 @@ def perform_computation(df,container_toFit,strip_list,key,roll):
     box_storer.append({"last_box_y":container_toFit.length-y_min})
     with open('static/box_coordinates.json', 'w') as file:
         json.dump(box_storer, file)
+    container_info = {"containerLength":container_toFit.length, "containerWidth":container_toFit.width, "containerHeight":container_toFit.height }
+    with open('static/container_info.json', 'w') as file:
+        json.dump(container_info, file)
     #returning the filename and dataframe to the frontend to display
     return filename_final,df
 
